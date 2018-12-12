@@ -95,11 +95,11 @@
            :disable nil
            )
          
-         (defthm ,(packn-pos (list 'iff- type-list-fix) type)
+         (defthm ,(packn-pos (list 'iff- type-list-fix) witness)
            (iff (,type-list-fix x)
                 (consp x)))
-         
-         (defthm ,(packn-pos (list 'open-consp- type-list-equiv) type)
+
+         (defthm ,(packn-pos (list 'open-consp- type-list-equiv) witness)
            (implies
             (or (consp x) (consp y))
             (equal (,type-list-equiv x y)
@@ -110,12 +110,38 @@
                         (,type-list-equiv (cdr x) (cdr y)))))
            :hints (("Goal" :in-theory (enable ,type-list-equiv))))
          
-         (defthm ,(packn-pos (list 'open- type-list-equiv) type)
+         (defthm ,(packn-pos (list 'open- type-list-equiv) witness)
            (implies
             (or (not (consp x)) (not (consp y)))
             (equal (,type-list-equiv x y)
                    (and (not (consp x)) (not (consp y)))))
            :hints (("Goal" :in-theory (enable ,type-list-equiv))))
          
+         (defcong ,type-list-equiv iff (consp x) 1)
+         
+         (encapsulate
+             ()
+           
+           (local
+            (defthm ,(packn-pos (list 'len- type-list-fix) witness)
+              (equal (len (,type-list-fix x))
+                     (len x))))
+           
+           (local
+            (defthmd ,(packn-pos (list 'len- type-list-fix '-helper) witness)
+              (implies
+               (equal y (,type-list-fix x))
+               (equal (len x)
+                      (len y)))))
+           
+           (defcong ,type-list-equiv equal (len x) 1
+             :hints (("Goal" :do-not-induct t
+                      :in-theory (enable ,type-list-equiv)
+                      :use (:instance ,(packn-pos (list 'len- type-list-fix '-helper) witness)
+                                      (x (,type-list-fix x))
+                                      (y (,type-list-fix x-equiv))))))
+           
+           )
+
          ))))
   

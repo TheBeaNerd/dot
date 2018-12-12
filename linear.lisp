@@ -66,6 +66,27 @@
       (and (equal (dot (poly-fix residual) (basis->poly basis)) 0)
            (non-negative-dotsp residual (cdr bases))))))
 
+(def::un reconstruct-partial (partial coeffs bases)
+  (declare (xargs :guard (equal (len coeffs) (len bases))
+                  :congruence ((poly-equiv rational-list-equiv basis-list-equiv) poly-equiv)
+                  :signature ((poly-p rational-listp basis-listp) poly-p)))
+  (cond
+   ((and (consp coeffs) (consp bases))
+    (let ((coeff (car coeffs))
+          (basis (car bases)))
+      (let ((partial (add partial (scale (basis->base basis) coeff))))
+        (reconstruct-partial partial (cdr coeffs) (cdr bases)))))
+   (t partial)))
+
+(def::un wf-basis-list (bases)
+  (declare (type t bases)
+           (xargs :congruence ((basis-list-equiv) equal)))
+  (if (not (consp bases)) t
+    (let ((basis (basis-fix! (car bases))))
+      (and (equal (len (basis->coeffs basis)) (len (cdr bases)))
+           (poly-equiv (basis->poly basis)
+                       (reconstruct-partial (basis->base basis) (basis->coeffs basis) (basis-list-fix (cdr bases))))
+           (wf-basis-list (cdr bases))))))
 
 ;; (def::un reduce-vector (vector plist bases)
 ;;   (if (not (consp list)) vector

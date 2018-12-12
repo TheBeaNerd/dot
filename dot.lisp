@@ -14,6 +14,14 @@
 
 (def::signature rfix (t) rationalp)
 
+(defthm equal-rfix-to-rfix-equiv
+  (iff (equal (rfix x) y)
+       (and
+        (rationalp y)
+        (rfix-equiv x y))))
+
+(local (in-theory (disable equal-rfix-to-rfix-equiv)))
+
 (defthm rationalp-*
   (implies
    (and
