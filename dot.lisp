@@ -1,6 +1,7 @@
 (in-package "ACL2")
 
 (include-book "util")
+(include-book "hints")
 
 (defun rfix-equiv (x y)
   (equal (rfix x) (rfix y)))
@@ -78,6 +79,7 @@
      ((zero-poly)      => * :formals    () :guard t)
      ((poly-p *)       => * :formals   (x) :guard t)
      ((poly-equiv * *) => * :formals (x y) :guard t)
+     ((poly-equiv-witness * *) => *)
      ((poly-fix *)     => * :formals   (x) :guard t)
      ((dot * *)        => * :formals (x y) :guard (and (poly-p x) (poly-p y)))
      ((add * *)        => * :formals (x y) :guard (and (poly-p x) (poly-p y)))
@@ -113,6 +115,12 @@
      (defun scale (x m)
        (* (rfix m) (rfix x)))
      
+     (defun-sk poly-equiv-sk (x y)
+       (forall (k) (equal (dot k x) (dot k y))))
+
+     (defun poly-equiv-witness (x y)
+       (poly-equiv-sk-witness x y))
+
      ))
   
   (defequiv poly-equiv)
@@ -230,7 +238,22 @@
      (not (zero-polyp x))
      (< 0 (dot x x)))
     :rule-classes :linear)
-     
+
+  (defthmd poly-equiv-reduction
+    (equal (poly-equiv x y)
+           (let ((k (poly-equiv-witness x y)))
+             (equal (dot k x) (dot k y))))
+    :rule-classes (:definition)
+    :hints (("Goal" :use (:instance poly-equiv-sk-necc
+                                    (k 1)))))
+
+  (defthmd poly-equiv-implication
+    (implies
+     (poly-equiv x y)
+     (equal (dot k x) (dot k y)))
+    :hints (("Goal" :use (:instance poly-equiv-sk-necc
+                                    (k 1)))))
+
   )
 
 (defun self-dot (x)
@@ -283,3 +306,37 @@
   :equiv  poly-equiv
   :define nil
   )
+
+(defun hide-poly-equiv (x y)
+  (poly-equiv x y))
+
+(defthmd do-hide-poly-equiv
+  (equal (poly-equiv x y)
+         (hide-poly-equiv x y)))
+
+(defthm hide-poly-equiv-implies
+  (implies
+   (hide-poly-equiv x y)
+   (iff (poly-equiv x y) t)))
+
+(defthmd hide-poly-equiv-reduction
+  (equal (hide-poly-equiv x y)
+         (let ((k (poly-equiv-witness x y)))
+           (equal (dot k x) (dot k y))))
+  :hints (("Goal" :in-theory (enable poly-equiv-reduction)))
+  :rule-classes (:definition))
+
+(in-theory (disable hide-poly-equiv))
+
+#+joe
+(defstub zed (x) nil)
+#+joe
+(trace$ skosimp-inst-hint)
+#+joe
+(defthm try-this
+  (implies
+   (poly-equiv (zed a) (zed b))
+   (poly-equiv a b))
+  :rule-classes nil
+  :hints ((skosimp-inst)))
+
