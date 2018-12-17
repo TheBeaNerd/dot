@@ -4,6 +4,9 @@
 
 (include-book "arithmetic-5/top" :dir :system)
 
+(in-theory (disable INTEGERP-MINUS-X))
+(in-theory (disable EQUAL-RFIX-TO-RFIX-EQUIV))
+
 (defthmd cornered
   (implies
    (and
@@ -18,49 +21,100 @@
 ;; p = ax + by + rp
 ;; s = cx + dy + rs
 
-;; y = y' + x
+;; y = y' + ex
 
-;; p = (a + b)x + by' + rp
+;; p' = (a + be)x + by' + rp
 
-;; s =        vx   vy     vr   
-;; y' = y - x
+;; s' =       vx + wy' + rs
 
-;; x = ac
-;; y = bd
+;; y' = y - ex
 
-;; p' = ax + by + rp
+;; s' =       vx + wy' + rs
 
-;; | 1 0 |
-;; | a 1 |
+;; (a + be)(v) + b(w) = 0
 
-;; dag
-;; (defthm skew-solution
-;;   (implies
-;;    (and
-;;     (not (equal (dot y y) 0))
-;;     (not (equal (dot x x) 0))
-;;     (rationalp vx)
-;;     (rationalp vy)
-;;     (equal (dot y x) 0)
-;;     (equal (dot x rp) 0)
-;;     (equal (dot x rs) 0)
-;;     (equal (dot y rp) 0)
-;;     (equal (dot y rs) 0)
-;;     (rationalp alpha)
-;;     (equal p    (add (scale x cx) (add (scale y cy) rp)))
-;;     (equal sln  (add (scale x (/ vx (dot x x))) (add (scale y (/ vy (dot y y))) rs)))
-;;     (equal (dot (add p (scale x (/ (dot p y) (dot y y)))) sln) 0)
-;;     (equal alpha (/ (* vx (rfix cy)) (dot x x)))
-;;     )
-;;    (equal (dot p (add sln (scale y alpha))) 0)))
+;; y' = y - ex
 
-(defthmd invertable-skew
+;; project solutio onto old basis (y - ex)
+
+;; You need to increase both x and y.
+
+;; Question: if we have a solution to the new system, how do we find a
+;; solution to the orignal system?  Well, isn't it obvious?
+
+(defun coeff (base poly)
+  (/ (dot poly base)
+     (dot base base)))
+
+(defthm coeff-scale
+  (equal (coeff x (scale x a))
+         (if (zero-polyp x) 0
+           (rfix a))))
+
+(defun skew (poly x coeff y)
+  (add poly (scale x (* (rfix coeff) (coeff y poly)))))
+
+#+joe
+(defun unskew (poly x coeff y)
+  (add poly (scale x (- (* coeff (coeff y poly))))))
+
+(defthmd skew-works
   (implies
    (and
-    (not (equal (dot y y) 0))
+    (not (zero-polyp y))
+    (not (equal (rfix cy) 0))
     (equal (dot y x) 0)
-    (equal p1 (add p0 (scale x (/ (dot p0 y) (dot y y)))))
-    (equal p2 (add p1 (scale x (/ (- (dot p1 y)) (dot y y))))))
+    (equal py (add (scale x cx) (scale y cy))))
+   (equal (dot (skew py x (/ (- (rfix cx)) (coeff y py))  y) sln)
+          (dot (scale y cy) sln))))
+
+(defthmd skew-is-invertable
+  (implies
+   (and
+    (not (zero-polyp y))
+    (equal (dot y x) 0)
+    (equal p1 (skew p0 x coeff y))
+    (equal p2 (skew p1 x (- (rfix coeff)) y)))
    (equal (dot p0 sln)
           (dot p2 sln))))
 
+;;(in-theory (enable rfix-equiv))
+
+;; Change of basis:
+;;
+;; |  1  0 ||x| = |   |
+;; | -2  1 ||y|   |   |
+;; | -7  2 |      | 0 |
+;;
+;;
+;; |  1  0 ||x'| = |x|
+;; |  2  1 ||y'|   |y|
+;;
+;;
+;; |x'| = |  1  0 ||x|
+;; |y'|   | -2  1 ||y|
+;;
+;; |  1  0 ||  1  0 ||x'| = |   |
+;; | -2  1 ||  2  1 ||y'|   |   |
+;; | -7  2 |                | 0 |
+;;
+;; |  1   0 ||x'| = |   |
+;; |  0   1 ||y'|   |   |
+;; | -3   2 |       | 0 |
+;;
+;; |x'| = | 2 |
+;; |y'|   | 3 |
+;;
+;; |x| = |  1  0 || 2 | = | 2 |
+;; |y|   |  2  1 || 3 |   | 7 |
+;;
+;; OK .. well, that worked.
+
+(defthmd skew-solution
+  (implies
+   (and
+    (not (zero-polyp y))
+    (not (zero-polyp x))
+    )
+   (equal (dot (skew pn x coeff y) sln) 
+          (dot pn (skew sln y (/ (* (dot x x) (rfix coeff)) (dot y y)) x)))))
