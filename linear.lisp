@@ -2,6 +2,43 @@
 
 (include-book "pot")
 
+;; 1) skew/rewrite new vector
+;; 2) decompose vector
+;; 3) take action
+
+;; A skew change of basis matrix is has the following form:
+
+;; |x'| = | 1 0 || x |
+;; |y'|   | c 1 || y |
+
+(fty::defprod+ skew
+  (
+   (x  poly-p)
+   (c  rationalp)
+   (y  non-zero-polyp)
+   )
+  )
+
+(def::type-list skew)
+
+(def::un skew-list-poly (vector skews)
+  (declare (xargs :signature ((poly-p skew-listp) poly-p)
+                  :congruence ((poly-equiv skew-list-equiv) poly-equiv)))
+  (if (not (consp skews)) vector
+    (let ((skew (skew-fix (car skews))))
+      (let ((vector (skew-poly vector (skew->x skew) (skew->c skew) (skew->y skew))))
+        (skew-list-poly vector (cdr skews))))))
+
+(def::un decompose-poly (residual bases)
+  (declare (xargs :signature ((poly-p non-zero-poly-listp) poly-p)
+                  :congruence ((poly-equiv non-zero-poly-list-equiv) poly-equiv)))
+  (if (not (consp bases)) residual
+    (let ((base (non-zero-poly-fix (car bases))))
+      (let ((c (coeff base residual)))
+        (let ((residual (add residual (scale base (- c)))))
+          (decompose-poly residual (cdr bases)))))))
+
+#|
 ;; If there is a solution to all these polys, the vector from the
 ;; current solution to it must be positive w/to all the zero and
 ;; negative polys.
@@ -25,11 +62,99 @@
     (and (not (zero-polyp (car plist)))
          (non-zero-poly-listp (cdr plist)))))
 
-;; Given a list of non-zero polys
+
+
+;; Given a list of non-zero basis polys
 ;; 
 ;; (b2 (a1  a0  ) . p2)
 ;;     (b1 (a0  ) . p1)
 ;;         (b0 () . p0)
+;; 
+;; The polys (p0 .. pn) each contribute unique bases (b0 .. bn).
+;; 
+;; While the bases are mutually disjoint ..
+;;
+;; the basis polys themselves may be linearly dependent.
+;; 
+;; We require, however, that the dependencies all be positive.
+;; 
+;; The coefficients stored in this structure are the coefficients
+;; with respect to the bais polys, not just their bases.
+;;
+;; The following algorithm is used to decompose a new poly (V) into
+;; basis poly coefficients ..
+;;
+;; Initially:
+;;
+;;            X = V 
+;;   (cN .. c0) = (0 .. 0)
+;;
+;; V =                   X                                               + (cN .. c0)(pN .. p0)'
+;;
+;; If X == 0, return (X, (cN .. c0))
+;;
+;; If (cN .. c0) is empty, return (X,())
+;;
+;;   pN = bN + (aN-1 .. a0)(pN-1 .. p0)'
+;;
+;;   bN = pN - (aN-1 .. a0)(pN-1 .. p0)'
+;;
+;;   xN = (<X,bN>/<bN,bN>
+;;
+;;   Add and subtract pN from X ..
+;;
+;; V = (xN)(pN)'      + (X - (xN)(pN))                                   + (cN .. c0)(pN .. p0)'
+;;
+;;   Expand pN ..
+;;
+;;   = (xN)(pN)'      + (X - (xN)(bN   + (aN-1 .. a0)(pN-1 .. p0)'))     + (cN .. c0)(pN .. p0)'
+;;
+;;   Distribute xN ..
+;;
+;;   = (xN)(pN)'      + (X - (xN)(bN)) + (- xN)(aN-1 .. a0)(pN-1 .. p0)' + (cN .. c0)(pN .. p0)'
+;;
+;;   Move cN*pN to the left ..
+;;
+;;   = (xN + cN)(pN)' + (X - (xN)(bN)) + (- xN)(aN-1 .. a0)(pN-1 .. p0)' + (cN-1 .. c0)(pN-1 .. p0)'
+;;
+;;   Collect the coefficients of (pN-1 .. p0) ..
+;;
+;;   = (xN + cN)(pN)' + (X - (xN)(bN)) +             ((- xN)(aN-1 .. a0) + (cN-1 .. c0))(pN-1 .. p0)'
+;;
+;;   dI = (- xN)*aI + cI
+;;
+;;    Y = (X - (xN)(bN))
+;;
+;;   Abstract using the definitions of dI and Y ..
+;;
+;; V = (xN + cN)(pN)' + Y                                                + (dN-1 .. d0)(pN-1 .. p0)'
+;;
+;; So this gives us the leading coefficient of V .. (xN + cN) ..
+;;
+;; .. and the process recurs on R = Y + (dN-1 .. d0)(pN-1 .. p0)'
+;;
+
+;;
+;; Adding a new poly base, V
+;;
+;; Consider the decomposition V = (aN .. a0)(pN .. p0)' + R
+;;
+;; If forall I: (aI < 0) then 
+;;
+;;   If (R == 0) then (aN .. a0)(pN .. p0)' = 0
+;; 
+;;   else skew R and p(N+1) = (aN .. a0) + R
+;;
+;; else if exits I: (aI < 0) then
+;;
+;;   If (R == 0) then skew largest J : (aJ > 0)
+;;
+;;   else skew R and p(N+1) = (aN .. a0) + R
+;;
+;; else
+;;  
+;;  If (R /= 0) then p(N+1) = (aN .. a0) + R
+;;
 
 (def::type-list rational
   :type-fix rfix
@@ -166,3 +291,4 @@
                     (let ((bases (cons (basis ) bases)))
                       (if (zero-polyp residual) (mv residual again bases)
                         (reduce vector residual (revappend again (cdr rest)) nil bases))))))))))))))
+|#

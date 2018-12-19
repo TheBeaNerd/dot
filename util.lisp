@@ -3,18 +3,29 @@
 (include-book "centaur/fty/basetypes" :dir :system)
 (include-book "centaur/fty/deftypes" :dir :system)
 (include-book "coi/util/defun" :dir :system)
+(include-book "workshops/2018/greve-gacek/types" :dir :system)
 
-(defmacro fty::defprod+ (name &rest args)
+(defun add-rule-classes (name instance body)
+  (if (not (consp body)) nil
+    (let ((entry (car body)))
+      (let ((access (packn-pos (list name '-> (car entry)) name)))
+        (cons `(,@entry :rule-classes (:rewrite (:forward-chaining :trigger-terms ((,access ,instance)))))
+              (add-rule-classes name instance (cdr body)))))))
+
+(defmacro fty::defprod+ (name body &rest args)
   (let ((name-p      (packn-pos (list name '-p)      name))
         (name-fix    (packn-pos (list name '-fix)    name))
         (name-fix!   (packn-pos (list name '-fix!)   name))
         (name-equiv  (packn-pos (list name '-equiv)  name))
         (name-equiv! (packn-pos (list name '-equiv!) name))
+        (name-instance (packn-pos (list name '-instance) name))
         )
     `(progn
        
        (fty::defprod ,name
+         ,(add-rule-classes name name-instance body)
          ,@args
+         :xvar ,name-instance
          )
        
        (def::un ,name-fix! (x)

@@ -1,6 +1,7 @@
 (in-package "ACL2")
 
 (include-book "linear")
+#|
 
 (def::un reconstruct-partial-offset (coeffs bases)
   (declare (xargs :guard (equal (len coeffs) (len bases))
@@ -101,3 +102,4 @@
   :hints (("Goal" :induct (repair-residual residuasl coeffs bases)
            :do-not-induct t
            :do-not '(generalize eliminate-destructors))))
+|#

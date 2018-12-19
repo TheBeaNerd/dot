@@ -77,6 +77,7 @@
     (
      ((zero-polyp *)   => * :formals   (x) :guard t)
      ((zero-poly)      => * :formals    () :guard t)
+     ((non-zero-poly)  => * :formals    () :guard t)
      ((poly-p *)       => * :formals   (x) :guard t)
      ((poly-equiv * *) => * :formals (x y) :guard t)
      ((poly-equiv-witness * *) => *)
@@ -105,6 +106,7 @@
        (equal (rfix x) 0))
      
      (defun zero-poly () 0)
+     (defun non-zero-poly () 1)
      
      (defun dot (x y)
        (* (rfix x) (rfix y)))
@@ -126,6 +128,7 @@
   (defequiv poly-equiv)
 
   (def::signature zero-poly () poly-p)
+  (def::signature non-zero-poly () poly-p)
   (def::signature dot    (t t) rationalp)
   (def::signature add    (t t) poly-p)
   (def::signature scale  (t t) poly-p)
@@ -163,10 +166,19 @@
   (defthm zero-polyp-zero-poly
     (zero-polyp (zero-poly)))
 
+  (defthm not-zero-polyp-non-zero-poly
+    (not (zero-polyp (non-zero-poly))))
+
+  (defthm zero-poly-implication
+    (implies
+     (zero-polyp x)
+     (poly-equiv x (zero-poly)))
+    :rule-classes (:forward-chaining))
+
   (defthm zero-dot-zero-poly
     (implies
      (equal (dot x x) 0)
-     (poly-equiv x (zero-poly)))
+     (zero-polyp x))
     :rule-classes (:forward-chaining))
 
   (defthm scale-by-zero
@@ -290,7 +302,7 @@
 ;;           ))
 
 (local
- (defthm sumba-wumba
+ (defthmd sumba-wumba
    (implies
     (and
      (rationalp a)
@@ -306,6 +318,151 @@
   :equiv  poly-equiv
   :define nil
   )
+
+(def::type-list poly
+  :type-fix poly-fix)
+
+(def::un zero-poly-fix (x)
+  (declare (xargs :signature ((t) zero-polyp)
+                  :congruence ((poly-equiv) poly-equiv)))
+  (if (zero-polyp x) x (zero-poly)))
+
+(fty::deffixtype zero-poly
+  :pred   zero-polyp
+  :fix    zero-poly-fix
+  :equiv  zero-poly-equiv
+  :define t
+  )
+
+(in-theory (disable zero-poly-fix))
+
+(def::type+ non-zero-polyp (x)
+  (declare (xargs :type-name non-zero-poly
+                  :type-witness (non-zero-poly)))
+  (and (poly-p x)
+       (not (zero-polyp x))))
+
+(def::type-list non-zero-poly
+  :type-p non-zero-polyp
+  :type-fix non-zero-poly-fix
+  )
+
+;; ==================================================================
+
+(def::un coeff (base poly)
+  (declare (xargs :signature ((poly-p poly-p) rationalp)
+                  :congruence ((poly-equiv poly-equiv) equal)
+                  :guard (not (zero-polyp base))))
+  (/ (dot poly base)
+     (dot base base)))
+
+(defthm zero-coeff-1
+  (implies
+   (zero-polyp x)
+   (equal (coeff x y) 0)))
+
+(defthm zero-coeff-2
+  (implies
+   (zero-polyp y)
+   (equal (coeff x y) 0)))
+
+(defthm coeff-scale
+  (equal (coeff x (scale y a))
+         (* (coeff x y) (rfix a))))
+
+(defthm self-coeff
+  (equal (coeff x x) 
+         (if (zero-polyp x) 0 1)))
+
+(defthm zero-coeff
+  (implies
+   (equal (dot x y) 0)
+   (equal (coeff x y) 0)))
+
+(defthm coeff-add
+  (equal (coeff base (add p1 p2))
+         (+ (coeff base p1) (coeff base p2))))
+
+(def::signatured coeff (t t) rationalp)
+
+;; ==================================================================
+
+(def::un skew-poly (poly x coeff y)
+  (declare (xargs :signature ((poly-p poly-p rationalp poly-p) poly-p)
+                  :guard (not (zero-polyp y))
+                  :congruence ((poly-equiv poly-equiv rfix-equiv poly-equiv) poly-equiv)))
+  (add poly (scale x (* (rfix coeff) (coeff y poly)))))
+
+(defthmd skew-poly-works
+  (implies
+   (and
+    (not (zero-polyp y))
+    (not (equal (rfix cy) 0))
+    (equal (dot y x) 0)
+    (equal py (add (scale x cx) (scale y cy))))
+   (equal (dot (skew-poly py x (/ (- (rfix cx)) (coeff y py))  y) sln)
+          (dot (scale y cy) sln))))
+
+(defthmd skew-poly-is-invertable
+  (implies
+   (and
+    (not (zero-polyp y))
+    (equal (dot y x) 0)
+    (equal p1 (skew-poly p0 x coeff y))
+    (equal p2 (skew-poly p1 x (- (rfix coeff)) y)))
+   (equal (dot p0 sln)
+          (dot p2 sln))))
+
+;;(in-theory (enable rfix-equiv))
+
+;; Change of basis:
+;;
+;; |  1  0 ||x| = |   |
+;; | -2  1 ||y|   |   |
+;; | -7  2 |      | 0 |
+;;
+;;
+;; |  1  0 ||x'| = |x|
+;; |  2  1 ||y'|   |y|
+;;
+;;
+;; |x'| = |  1  0 ||x|
+;; |y'|   | -2  1 ||y|
+;;
+;; |  1  0 ||  1  0 ||x'| = |   |
+;; | -2  1 ||  2  1 ||y'|   |   |
+;; | -7  2 |                | 0 |
+;;
+;; |  1   0 ||x'| = |   |
+;; |  0   1 ||y'|   |   |
+;; | -3   2 |       | 0 |
+;;
+;; |x'| = | 2 |
+;; |y'|   | 3 |
+;;
+;; |x| = |  1  0 || 2 | = | 2 |
+;; |y|   |  2  1 || 3 |   | 7 |
+;;
+;; OK .. well, that worked.
+
+(defthmd skew-poly-solution
+  (implies
+   (and
+    (not (zero-polyp y))
+    (not (zero-polyp x))
+    )
+   (equal (dot (skew-poly pn x coeff y) sln) 
+          (dot pn (skew-poly sln y (/ (* (dot x x) (rfix coeff)) (dot y y)) x))))
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(defthmd skew-poly-as-equality
+  (equal (dot (skew-poly poly x -1 x) x)
+         0)
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(def::signatured skew-poly (t t t t) poly-p)
+
+;; ==================================================================
 
 (defun hide-poly-equiv (x y)
   (poly-equiv x y))
