@@ -29,16 +29,150 @@
       (let ((vector (skew-poly vector (skew->x skew) (skew->c skew) (skew->y skew))))
         (skew-list-poly vector (cdr skews))))))
 
-(def::un decompose-poly (residual bases)
-  (declare (xargs :signature ((poly-p non-zero-poly-listp) poly-p)
-                  :congruence ((poly-equiv non-zero-poly-list-equiv) poly-equiv)))
-  (if (not (consp bases)) residual
+(def::un poly-coefficients (poly bases)
+  (declare (xargs :signature ((poly-p non-zero-poly-listp) rational-listp)
+                  :congruence ((poly-equiv non-zero-poly-list-equiv) equal)))
+  (if (not (consp bases)) nil
     (let ((base (non-zero-poly-fix (car bases))))
-      (let ((c (coeff base residual)))
-        (let ((residual (add residual (scale base (- c)))))
-          (decompose-poly residual (cdr bases)))))))
+      (let ((c (coeff base poly)))
+        (cons c (poly-coefficients poly (cdr bases)))))))
+
+(defthm len-poly-coefficients
+  (equal (len (poly-coefficients poly bases))
+         (len bases)))
+
+(def::un reconstruct-poly (coeffs bases)
+  (declare (xargs :signature ((rational-listp non-zero-poly-listp) poly-p)
+                  :congruence ((rational-list-equiv non-zero-poly-list-equiv) poly-equiv)
+                  :signature-hints (("Goal" :in-theory (disable (reconstruct-poly))))))
+  (if (not (and (consp coeffs) (consp bases))) (zero-poly)
+    (add (scale (non-zero-poly-fix (car bases)) (rfix (car coeffs)))
+         (reconstruct-poly (cdr coeffs) (cdr bases)))))
+      
+(def::un disjoint-from-all (poly bases)
+  (declare (type t poly bases)
+           (xargs :congruence ((poly-equiv non-zero-poly-list-equiv) equal)))
+  (if (not (consp bases)) t
+    (and (= (dot (poly-fix poly) (non-zero-poly-fix (car bases))) 0)
+         (disjoint-from-all poly (cdr bases)))))
+
+(def::un mutually-disjoint (bases)
+  (declare (type t bases)
+           (xargs :congruence ((non-zero-poly-list-equiv) equal)))
+  (if (not (consp bases)) t
+    (and (disjoint-from-all (non-zero-poly-fix (car bases)) (cdr bases))
+         (mutually-disjoint (cdr bases)))))
+
+(defthm drop-irrelevant-addend
+  (implies
+   (disjoint-from-all x bases)
+   (equal (disjoint-from-all (add a (add b x)) bases)
+          (disjoint-from-all (add a b) bases))))
+
+(include-book "arithmetic-5/top" :dir :system)
+
+(defthm decomposition-is-disjoint-from-all-bases
+  (implies
+   (mutually-disjoint bases)
+   (disjoint-from-all (add poly (scale (reconstruct-poly (poly-coefficients poly bases) bases) -1))
+                      bases))
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(def::un all-zero (x)
+  (declare (type t x)
+           (xargs :congruence ((rational-list-equiv) equal)))
+  (if (not (consp x)) t
+    (and (= (rfix (car x)) 0)
+         (all-zero (cdr x)))))
+
+(def::un all-non-negative (x)
+  (declare (type t x)
+           (xargs :congruence ((rational-list-equiv) equal)))
+  (if (not (consp x)) t
+    (and (<= 0 (rfix (car x)))
+         (all-non-negative (cdr x)))))
+ 
+(def::un keep-non-negative-coefficients (x)
+  (declare (xargs :signature ((t) rational-listp)
+                  :congruence ((rational-list-equiv) rational-list-equiv)))
+  (if (not (consp x)) nil
+    (if (<= 0 (rfix (car x)))
+        (cons (rfix (car x))
+              (keep-non-negative-coefficients (cdr x)))
+      (cons 0 (keep-non-negative-coefficients (cdr x))))))
+
+(def::un keep-non-positive-coefficients (x)
+  (declare (xargs :signature ((t) rational-listp)
+                  :congruence ((rational-list-equiv) rational-list-equiv)))
+  (if (not (consp x)) nil
+    (if (<= (rfix (car x)) 0)
+        (cons (rfix (car x))
+              (keep-non-positive-coefficients (cdr x)))
+      (cons 0 (keep-non-positive-coefficients (cdr x))))))
+
+(defthmd keep-both-splits-list-conservatively
+  (poly-equiv (reconstruct-poly x bases)
+              (add (reconstruct-poly (keep-non-negative-coefficients x) bases)
+                   (reconstruct-poly (keep-non-positive-coefficients x) bases))))
+
+(def::un find-first-non-zero-contribution (coeffs)
+  (declare (xargs :signature ((t) natp)
+                  :congruence ((rational-list-equiv) equal)))
+  (if (not (consp coeffs)) 1
+    (let ((coeff (rfix (car coeffs))))
+      (if (not (= coeff 0)) 0
+        (1+ (find-first-non-zero-contribution (cdr coeffs)))))))
 
 #|
+
+(def::und make-skew ()
+
+
+  (replace-nth-base n base bases)
+  
+
+;; equiv
+;; 
+
+
+(defun add-poly (poly bases)
+  (if (zero-polyp poly) bases
+    (let ((coeffs (poly-coefficients poly bases)))
+      (if (all-zero coeffs) (cons poly bases)
+        (let ((residual (add poly (scale (reconstruct-poly coeffs bases) -1))))
+          (cond
+           ((zero-polyp residual) 
+            ((all-negative coeffs)
+             ..)
+            (t
+             bases))
+           (t
+            ;; We need to do some repair
+            ((zero-poly-p residual)
+             (if (all-non-negative coeffs) bases
+               (let ((n (find-first-non-zero-contribution coeffs)))
+                 (cond
+                  ((< n (len coeffs))
+                   ..)
+                  ()))))
+            (t
+        (if (all-
+            ((all-negative coeffs)
+          ;; equality
+          ;; at least one negative
+          
+          (
+    
+
+;;  x
+;;     y
+;;        z
+;; -x -y -z
+
+;;
+
+
+
 ;; If there is a solution to all these polys, the vector from the
 ;; current solution to it must be positive w/to all the zero and
 ;; negative polys.

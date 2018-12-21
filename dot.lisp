@@ -45,6 +45,12 @@
 (in-theory (disable rfix))
 (in-theory (disable rfix-equiv))
 
+(def::type-list rational
+  :define-type-list nil
+  :type-fix rfix
+  :witness defthm
+  )
+
 (defthm non-negative-square
   (implies
    (rationalp x)
