@@ -15,13 +15,11 @@
 
 (def::signature rfix (t) rationalp)
 
-(defthm equal-rfix-to-rfix-equiv
+(defthmd equal-rfix-to-rfix-equiv
   (iff (equal (rfix x) y)
        (and
         (rationalp y)
         (rfix-equiv x y))))
-
-(local (in-theory (disable equal-rfix-to-rfix-equiv)))
 
 (defthm rationalp-*
   (implies
@@ -135,11 +133,12 @@
 
   (def::signature zero-poly () poly-p)
   (def::signature non-zero-poly () poly-p)
-  (def::signature dot    (t t) rationalp)
-  (def::signature add    (t t) poly-p)
-  (def::signature scale  (t t) poly-p)
-  (def::signature poly-fix (t) poly-p)
-  
+  (def::signature dot      (t t) rationalp)
+  (def::signature add      (t t) poly-p)
+  (def::signature scale    (t t) poly-p)
+  (def::signature poly-fix   (t) poly-p)
+  (def::signature zero-polyp (t) booleanp)
+
   (defcong rfix-equiv poly-equiv (scale x m) 2)
   (defcong poly-equiv poly-equiv (scale x m) 1)
 
@@ -168,6 +167,10 @@
   (defthm add-commute
     (poly-equiv (add x y)
            (add y x)))
+
+  (defthmd zero-polyp-definition
+    (equal (zero-polyp x)
+           (poly-equiv x (zero-poly))))
 
   (defthm zero-polyp-zero-poly
     (zero-polyp (zero-poly)))
