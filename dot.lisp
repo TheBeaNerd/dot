@@ -67,6 +67,7 @@
   (implies
    (rationalp x)
    (<= 0 (expt x 2)))
+  :rule-classes (:rewrite :linear (:forward-chaining :trigger-terms ((expt x 2))))
   :hints (("Goal" :expand (:free (n) (expt x n)))))
 
 (defthm positive-expt
@@ -75,6 +76,7 @@
     (rationalp x)
     (not (equal x 0)))
    (< 0 (expt x 2)))
+  :rule-classes (:rewrite :linear (:forward-chaining :trigger-terms ((expt x 2))))
   :hints (("Goal" :expand (:free (n) (expt x n)))))
 
 (encapsulate

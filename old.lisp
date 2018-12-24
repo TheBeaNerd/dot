@@ -46,6 +46,8 @@
     (('binary-/ n d)
      (let ((la (product-denominators n)))
        (if (not la) d `(binary-* ,la ,d))))
+    (('expt x ('quote v))
+     (if (< v 0) x nil))
     (('binary-* l r)
      (let ((la (product-denominators l))
            (ra (product-denominators r)))
@@ -61,7 +63,7 @@
       (if ay (acons a ay nil)
         nil))))
 
-(defthm promote-denominators
+(defthm equality-promote-denominators
   (implies
    (and
     (acl2-numberp x)
@@ -73,6 +75,33 @@
     (equal ay (* a y)))
    (iff (equal x y)
         (equal ax ay))))
+
+(defthmd <-+-promote-denominators
+  (implies
+   (and
+    (acl2-numberp x)
+    (acl2-numberp y)
+    (bind-free (bind-denominators 'a x y) (a))
+    (rationalp a)
+    (case-split (< 0 a))
+    (equal ax (* a x))
+    (equal ay (* a y)))
+   (iff (< x y)
+        (< ax ay)))
+  :hints (("Goal" :nonlinearp t)))
+
+(defthmd <---promote-denominators
+  (implies
+   (and
+    (acl2-numberp x)
+    (acl2-numberp y)
+    (bind-free (bind-denominators 'a x y) (a))
+    (rationalp a)
+    (case-split (< a 0))
+    (equal ax (* a x))
+    (equal ay (* a y)))
+   (iff (< x y)
+        (< ay ax))))
 
 (defthm known-zero-reciporicals-should-be-zero
   (implies
@@ -287,6 +316,12 @@
    (val 2 (decompose-over-bases vector base0 base01)))
   :hints ((skosimp-inst)))
 
+(defthm delta-residual-are-orthoganal
+  (equal (dot (val 1 (decompose-over-bases vector base0 base01))
+              (val 2 (decompose-over-bases vector base0 base01)))
+         0)
+  :hints (("Goal" :in-theory (enable coeff))))
+
 (defthmd linearly-dependent-implies-equal-scale
   (implies
    (linearly-dependent base0 base01)
@@ -296,8 +331,8 @@
           (skosimp-inst)))
 
 (defthm residual-is-zero-on-bases
-  (and (= (dot (val 2 (decompose-over-bases vector base0 base01)) base0 ) 0)
-       (= (dot (val 2 (decompose-over-bases vector base0 base01)) base01) 0))
+  (and (equal (dot (val 2 (decompose-over-bases vector base0 base01)) base0 ) 0)
+       (equal (dot (val 2 (decompose-over-bases vector base0 base01)) base01) 0))
   :hints (("Goal" :in-theory (enable coeff))
           (and stable-under-simplificationp
                '(:cases ((linearly-dependent base0 base01))))
@@ -306,30 +341,99 @@
                  :use linearly-dependent-implies-equal-scale))
           ))
 
+(defthm zero-polyp-vector
+  (equal (zero-polyp (VAL 0 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0)))
+         (zero-polyp vector)))
+
+(defthm positive-cube
+  (implies
+   (and
+    (rationalp x)
+    (< 0 x))
+   (< 0 (expt x 3)))
+  :rule-classes (:rewrite :linear (:forward-chaining :trigger-terms ((expt x 3))))
+  :hints (("Goal" :expand (expt x 3))))
+
+#+joe
+(defthm woot-woot
+  (implies
+   (and
+    (rationalp x)
+    (rationalp y)
+    (< 0 x)
+    (< 0 y))
+   (< 0 (* x y)))
+  :rule-classes (:rewrite :linear (:forward-chaining :trigger-terms ((binary-* x y)))))
+
+#+joe
+(defthm woot-boot
+  (implies
+   (and
+    (rationalp x)
+    (rationalp y)
+    (<= 0 x)
+    (<= 0 y))
+   (<= 0 (* x y)))
+  :rule-classes (:rewrite :linear (:forward-chaining :trigger-terms ((binary-* x y)))))
+
+#+joe
+(defthm zoot
+  (implies
+   (and
+    (<= 0 x)
+    (<= 0 y)
+    (or
+     (< 0 x)
+     (< 0 y)))
+   (not (equal (+ x y) 0))))
+
+(defthm rationalp-negation
+  (implies
+   (rationalp x)
+   (rationalp (- x))))
+
+(in-theory (enable rationalp-+ rationalp-*))
+
+(defthm zero-polyp-delta
+  (equal (zero-polyp (VAL 1 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0)))
+         (or (and (equal (dot vector delta) 0)
+                  (equal (dot vector base0) 0))
+             (and (zero-polyp delta)
+                  (zero-polyp base0))))
+  :hints (("Goal" :in-theory (enable coeff zero-polyp-definition)
+           :use ((:instance poly-equiv-implication
+                            (x (VAL 1 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0)))
+                            (y (zero-poly))
+                            (k delta))
+                 (:instance poly-equiv-implication
+                            (x (VAL 1 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0)))
+                            (y (zero-poly))
+                            (k base0))))
+          (and stable-under-simplificationp
+               '(:use (:instance  linearly-dependent-implies-equal-scale
+                                  (base01 delta))))
+          ))
+
 (in-theory (disable decompose-over-bases))
 
-#|
+(defthm decompose-over-bases-positive-residual
+  (<= 0 (DOT (VAL 0 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0))
+             (VAL 2 (DECOMPOSE-OVER-BASES VECTOR DELTA BASE0))))
+  :rule-classes (:rewrite :linear)
+  :hints (("Goal" :in-theory (disable decompose-over-bases-enforces-vector-decompositon-relation)
+           :use (:instance decompose-over-bases-enforces-vector-decompositon-relation
+                           (base01 base0)
+                           (base0 delta)))))
 
-(def::un restrict (vector delta residual base0)
+(defun restrict (vector delta residual base0)
   (let ((dot (dot residual base0)))
     (if (<= 0 dot) (mv vector delta residual (list base0))
       (let ((coeff (/ dot (self-dot base0))))
         (let ((residual (add residual (scale base0 coeff))))
           (let ((dot (dot residual vector)))
             (if (< 0 dot) (mv vector (add delta (scale base0 (- coeff))) residual nil)
-              (let ((alpha (coeff delta base0)))
-                (let ((base1 (add delta (scale base0 (- alpha)))))
-                  ;; base0 =       base0
-                  ;; delta = alpha*base0 + base1
-                  (let* ((coeff1 (coeff vector base1))
-                         (coeff0 (coeff vector base0)))
-                    ;; gamma*coeff1 + alpha*coeff0 = 0
-                    ;; gamma = (- alpha*coeff0)/coeff1
-                    (let ((gamma (/ (- (* alpha coeff0)) coeff1)))
-                      (let ((delta (add (scale base0 gamma) (scale delta coeff1))))
-                        (let ((residual (add vector (scale delta -1))))
-                          (mv vector delta residual nil))))))))))))))
-
+              (met ((vector delta residual) (decompose-over-bases vector delta base0))
+                (mv vector delta residual nil)))))))))
 
 (defthm vector-decompositon-is-preserved
   (implies
@@ -338,23 +442,25 @@
     (val 0 (restrict vector delta residual base0))
     (val 1 (restrict vector delta residual base0))
     (val 2 (restrict vector delta residual base0))))
-  :hints ((skosimp-inst)))
+  :hints (("Goal" :in-theory (disable vector-decomposition-relation))
+          (and stable-under-simplificationp
+               '(:in-theory (current-theory :here)))
+          (skosimp-inst)
+          ))
 
-(defthm residual-is-positive-on-vector
+(defthm residual-is-non-negative-on-vector
   (implies
    (and
     (vector-decomposition-relation vector delta residual)
     (< 0 (dot vector residual)))
-   (implies
-    (not (zero-polyp (val 2 (restrict vector delta residual base0))))
-    (< 0 (dot (val 2 (restrict vector delta residual base0))
-              (val 0 (restrict vector delta residual base0))))))
+   (<= 0 (dot (val 2 (restrict vector delta residual base0))
+              (val 0 (restrict vector delta residual base0)))))
   :hints (("Goal" :in-theory (enable coeff))))
 
+#+joe
 (defthm residual-is-not-negative-on-base0
   (<= 0 (dot (val 2 (restrict vector delta residual base0)) base0)))
 
+#+joe
 (defthm residual-is-not-negative-on-delta
   (<= 0 (dot (val 2 (restrict vector delta residual base0)) delta)))
-
-|#
