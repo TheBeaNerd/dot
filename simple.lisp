@@ -45,27 +45,56 @@
 ;; solving a problem of linear constraints.  From there we can
 ;; focus on optimizing the computational process.
 
-(defun linearize-around-vector (vector bases)
+(include-book "dot")
+
+(fty::defprod+ base
+ (
+  (bias rationalp)
+  (poly poly)
+  ))
+
+(def::type-list base)
+
+(def::un linearize-around-vector (vector bases)
+  (declare (xargs :signature ((poly-p base-listp) base-listp)
+                  :congruence ((poly-equiv base-list-equiv) equal)))
   (if (not (consp bases)) nil
     (let ((base (car bases)))
       (cons (base (- (base->bias base) (dot vector (base->poly base))) (base->poly base))
             (linearize-around-vector vector (cdr bases))))))
 
-(defun zeroize-biases (bases)
+(def::signatured linearize-around-vector (t t) base-listp)
+
+(def::un zeroize-biases (bases)
+  (declare (xargs :signature ((base-listp) base-listp)
+                  :congruence ((base-list-equiv) equal)))
   (if (not (consp bases)) nil
     (let ((base (car bases)))
       (cons (base 0 (base->poly base))
             (zeroize-biases (cdr bases))))))
 
-(defun split-bases-rec (vector bases nbases zbases pbases)
-  (if (not (consp bases)) (mvlist nbases zbases pbases)
-    (let ((base (car bases)))
-      (let ((score (score-vector vector base)))
-        (if (< score 0) (split-bases-rec vector bases (cons base nbases) zbases pbases)
-          (if (< 0 score) (split-bases-rec vector bases nbases zbases (cons base pbases))
-            (split-bases-rec vector bases nbases (cons base zbases) pbases)))))))
+(def::signatured zeroize-biases (t) base-listp)
 
-(defun split-bases (vector bases)
+(def::und score-base (vector base)
+  (declare (xargs :signature ((poly-p base-p) rationalp)
+                  :congruence ((poly-equiv base-equiv) equal)))
+  (- (base->bias base) (dot (base->poly base) vector)))
+
+(def::un split-bases-rec (vector bases nbases zbases pbases)
+  (declare (xargs :signature ((poly-p base-listp base-listp base-listp base-listp) 
+                              base-listp base-listp base-listp)
+                  :congruence ((poly-equiv base-list-equiv base-list-equiv base-list-equiv base-list-equiv) 
+                               base-list-equiv base-list-equiv base-list-equiv)))
+  (if (not (consp bases)) (mvlist nbases zbases pbases)
+    (let ((base (base-fix! (car bases))))
+      (let ((score (score-base vector base)))
+        (if (< score 0) (split-bases-rec vector (cdr bases) (cons base nbases) zbases pbases)
+          (if (< 0 score) (split-bases-rec vector (cdr bases) nbases zbases (cons base pbases))
+            (split-bases-rec vector (cdr bases) nbases (cons base zbases) pbases)))))))
+
+(def::und split-bases (vector bases)
+  (declare (xargs :signature ((poly-p base-listp)  base-listp base-listp base-listp)
+                  :congruence ((poly-equiv base-list-equiv) base-list-equiv base-list-equiv base-list-equiv)))
   (split-bases-rec vector bases nil nil nil))
 
 ;; positive alpha moves in the right direction
@@ -80,30 +109,40 @@
 
 ;; largest + alpha <= the abs of the largest - value
 
-(defun upper-bound (max list)
-  (if (not (consp list)) max
-    (let ((value (car list)))
-      (if (<= value 0) (upper-bound max (cdr list))
-        (upper-bound (max value max) (cdr list))))))
+(def::un upper-bound (max list)
+  (declare (xargs :measure (len list)
+                  :signature ((rationalp rational-listp) rationalp)
+                  :congruence ((rfix-equiv rational-list-equiv) equal)))
+  (let ((max (rfix max)))
+    (if (not (consp list)) max
+      (let ((value (rfix (car list))))
+        (if (<= value 0) (upper-bound max (cdr list))
+          (upper-bound (max value max) (cdr list)))))))
 
-(defun lower-bound (min list)
-  (if (not (consp list)) min
-    (let ((value (car list)))
-      (if (<= 0 value) (lower-bound min (cdr list))
-        (lower-bound (min min (abs value)) (cdr list))))))
+(def::un lower-bound (min list)
+  (declare (xargs :measure (len list)
+                  :signature ((rationalp rational-listp) rationalp)
+                  :congruence ((rfix-equiv rational-list-equiv) equal)))
+  (let ((min (rfix min)))
+    (if (not (consp list)) min
+      (let ((value (rfix (car list))))
+        (if (<= 0 value) (lower-bound min (cdr list))
+          (lower-bound (min min (abs value)) (cdr list)))))))
 
 ;; if the largest positive is greater than the largest negative,
 ;; use the largest positive
 ;; else use the smallest negative
 
-(defun alpha-list (sln delta bases)
+(def::un alpha-list (sln delta bases)
+  (declare (xargs :signature ((poly-p poly-p base-listp) rational-listp)
+                  :congruence ((poly-equiv poly-equiv base-list-equiv) equal)))
   (if (not (consp bases)) nil
-    (let ((base (car bases)))
+    (let ((base (base-fix! (car bases))))
       ;; c0 <= (sln + alpha*delta)*b
       ;; c0 <= sln*b + alpha*delta*b
       ;; alpha = (c0 - sln*b)/(delta*b)
       (let ((n (- (base->bias base) (dot sln (base->poly base))))
-            (d (dot delta (base-poly base))))
+            (d (dot delta (base->poly base))))
         (cond
          ;; negative      - decreasing      : upper bound : -alpha
          ((and (< n 0) (< d 0))
@@ -114,16 +153,35 @@
          (t
           (cons 0 (alpha-list sln delta (cdr bases)))))))))
 
-(defun alpha (sln delta bases)
+(def::und alpha (sln delta bases)
+  (declare (xargs :signature ((poly-p poly-p base-listp) rationalp)
+                  :congruence ((poly-equiv poly-equiv base-list-equiv) equal)))
   (let ((alpha-list (alpha-list sln delta bases)))
     (let ((alpha (upper-bound 0 alpha-list)))
       (lower-bound alpha alpha-list))))
 
-(defun weighted-vector (vector nbases)
-  (if (not (consp nbases)) (zero-vector)
-    (let ((poly (base->poly (car nbases))))
-      (add (scale poly (- (/ (dot poly vector))))
-           (weighted-vector vector (cdr nbases))))))
+(def::un weighted-vector (vector nbases)
+  (declare (xargs :signature ((poly-p base-listp) poly-p)
+                  :congruence ((poly-equiv base-list-equiv) poly-equiv)))
+  (if (not (consp nbases)) (zero-poly)
+    (let ((base (base-fix! (car nbases))))
+      (let ((poly (base->poly base)))
+        (add (scale poly (- (dot poly vector)))
+             (weighted-vector vector (cdr nbases)))))))
+
+(def::un sum-polys (nbases)
+  (declare (xargs :signature ((base-listp) poly-p)
+                  :signature-hints (("Goal" :in-theory (disable (sum-polys))))
+                  :congruence ((base-list-equiv) poly-equiv)))
+  (if (not (consp nbases)) (zero-poly)
+    (let ((base (base-fix! (car nbases))))
+      (add (base->poly base) (sum-polys (cdr nbases))))))
+
+(def::signatured sum-polys (t) poly-p)
+
+(defund non-nil-test (x)
+  (declare (type t x))
+  (not (not x)))
 
 ;; 0 <= vector*(vector + delta)
 ;; (- vector*vector) <= vector*delta
@@ -134,11 +192,32 @@
        (declare (ignore zbases pbases))
        (if (null nbases) vector
          (let ((bases (cons (base 0 vector) nbases)))
-           (let ((bases (linearize-around-vector vector nbases)))
-             (metlist ((unsat delta) (max-solution vector zbases (zero-vector)))
-               (or unsat delta))))))))
+           (let ((bases (linearize-around-vector vector bases)))
+             (metlist ((unsat delta) (max-solution bases (zero-poly)))
+               (if (non-nil-test unsat) (poly-fix unsat) delta))))))))
   
-(defun max-solution (vector bases sln)
+(include-book "coi/defung/defung" :dir :system)
+
+(in-theory 
+ (disable 
+  BASE-OF-RFIX-BIAS-NORMALIZE-CONST
+  BASE-OF-POLY-FIX-POLY-NORMALIZE-CONST
+  DEFUNG::NORMALIZE-TRUE
+  SCALE-BY-ZERO
+  ADD-ZERO-1
+  ADD-ZERO-2
+  default-car
+  default-cdr
+  DEFAULT-UNARY-MINUS
+  BASE->POLY$INLINE-OF-BASE-FIX-BASE-INSTANCE
+  BASE->POLY$INLINE-OF-BASE-FIX-BASE-INSTANCE-NORMALIZE-CONST
+  ))
+
+(def::ung max-solution (bases sln)
+  (declare (xargs :signature ((base-listp poly-p) t poly-p)
+                  :default-value (mvlist (zero-poly) (zero-poly))
+                  ;;:congruences ((base-list-equiv poly-equiv) nil poly-equiv)
+                  ))
   ;;
   ;; So we should probably have "a solution" and "the optimal"
   ;; solution.
@@ -155,9 +234,10 @@
   ;;
   (metlist ((nbases zbases pbases) (split-bases sln bases))
     (declare (ignore pbases))
-    (if (null nbases) (mv nil sln)
-      (let ((delta (zero-delta vector (zeroize-biases zbases))))
-        (if (zero-polyp delta) (mv delta sln)
-          (let ((alpha (alpha sln delta bases)))
-            (let ((sln (add sln (scale delta alpha))))
-              (max-solution vector bases sln))))))))
+    (if (null nbases) (mvlist nil sln)
+      (let ((vector (sum-polys nbases)))
+        (let ((delta (zero-delta vector (zeroize-biases zbases))))
+          (if (zero-polyp delta) (mvlist delta sln)
+            (let ((alpha (alpha sln delta bases)))
+              (let ((sln (add sln (scale delta alpha))))
+                (max-solution bases sln)))))))))

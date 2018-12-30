@@ -131,6 +131,10 @@
 
      ))
   
+  ;; Ugh .. this is annoying .. see: def::ung
+  (defthm zero-poly-nil
+    (zero-polyp nil))
+
   (defequiv poly-equiv)
 
   (def::signature zero-poly () poly-p)
