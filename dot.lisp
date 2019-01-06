@@ -364,12 +364,12 @@
 
 ;; ==================================================================
 
-(def::un coeff (base poly)
+(def::un coeff (poly base)
   (declare (xargs :signature ((poly-p poly-p) rationalp)
-                  :congruence ((poly-equiv poly-equiv) equal)
-                  :guard (not (zero-polyp base))))
-  (/ (dot poly base)
-     (dot base base)))
+                  :congruence ((poly-equiv poly-equiv) equal)))
+  (let ((bb (dot base base)))
+    (if (= bb 0) 0
+      (/ (dot poly base) bb))))
 
 (defthm zero-coeff-1
   (implies
@@ -382,8 +382,8 @@
    (equal (coeff x y) 0)))
 
 (defthm coeff-scale
-  (equal (coeff x (scale y a))
-         (* (coeff x y) (rfix a))))
+  (equal (coeff (scale y a) x)
+         (* (coeff y x) (rfix a))))
 
 (defthm self-coeff
   (equal (coeff x x) 
@@ -395,8 +395,8 @@
    (equal (coeff x y) 0)))
 
 (defthm coeff-add
-  (equal (coeff base (add p1 p2))
-         (+ (coeff base p1) (coeff base p2))))
+  (equal (coeff (add p1 p2) base)
+         (+ (coeff p1 base) (coeff p2 base))))
 
 (def::signatured coeff (t t) rationalp)
 
@@ -406,7 +406,7 @@
   (declare (xargs :signature ((poly-p poly-p rationalp poly-p) poly-p)
                   :guard (not (zero-polyp y))
                   :congruence ((poly-equiv poly-equiv rfix-equiv poly-equiv) poly-equiv)))
-  (add poly (scale x (* (rfix coeff) (coeff y poly)))))
+  (add poly (scale x (* (rfix coeff) (coeff poly y)))))
 
 (defthmd skew-poly-works
   (implies
@@ -415,7 +415,7 @@
     (not (equal (rfix cy) 0))
     (equal (dot y x) 0)
     (equal py (add (scale x cx) (scale y cy))))
-   (equal (dot (skew-poly py x (/ (- (rfix cx)) (coeff y py))  y) sln)
+   (equal (dot (skew-poly py x (/ (- (rfix cx)) (coeff py y))  y) sln)
           (dot (scale y cy) sln))))
 
 (defthmd skew-poly-is-invertable

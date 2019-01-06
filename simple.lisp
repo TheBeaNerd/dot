@@ -166,8 +166,12 @@
   (if (not (consp nbases)) (zero-poly)
     (let ((base (base-fix! (car nbases))))
       (let ((poly (base->poly base)))
-        (add (scale poly (- (dot poly vector)))
-             (weighted-vector vector (cdr nbases)))))))
+        (let ((dot (dot poly vector)))
+          (if (= dot 0) (weighted-vector vector (cdr nbases))
+            (add (scale poly (- (/ dot)))
+                 (weighted-vector vector (cdr nbases)))))))))
+
+(def::signatured weighted-vector (t t) poly-p)
 
 (def::un sum-polys (nbases)
   (declare (xargs :signature ((base-listp) poly-p)
@@ -177,25 +181,89 @@
     (let ((base (base-fix! (car nbases))))
       (add (base->poly base) (sum-polys (cdr nbases))))))
 
+(def::un dot-list (vector list)
+  (declare (xargs :signature ((poly-p base-listp) rational-listp)
+                  :congruence ((poly-equiv base-list-equiv) equal)))
+  (if (not (consp list)) nil
+    (let ((base (base-fix! (car list))))
+      (cons (dot vector (base->poly base))
+            (dot-list vector (cdr list))))))
+
+(def::un all-non-positive (list)
+  (declare (xargs :signature ((rational-listp) booleanp)
+                  :congruence ((rational-list-equiv) equal)))
+  (if (not (consp list)) t
+    (let ((entry (rfix (car list))))
+      (and (<= entry 0)
+           (all-non-positive (cdr list))))))
+
+(def::un all-negative (list)
+  (declare (xargs :signature ((rational-listp) booleanp)
+                  :congruence ((rational-list-equiv) equal)))
+  (if (not (consp list)) t
+    (let ((entry (rfix (car list))))
+      (and (< entry 0)
+           (all-negative (cdr list))))))
+
+;; If we know that all individually are (-) w/to a
+;; given vector then the sum must be (-) w/to that
+;; same vector.
+
+(defthm all-negative-dot-list
+  (implies
+   (and
+    (all-negative (dot-list sln nbases))
+    (consp nbases))
+   (< (dot sln (sum-polys nbases)) 0)))
+ 
+(encapsulate
+    ()
+
+  (local
+   (defthm sum-linear-relations
+     (implies
+      (and
+       (<= (dot x (add x y)) 0)
+       (<= (dot y (add x y)) 0))
+      (equal (dot (add x y) (add x y)) 0))
+     :hints (("Goal" :use (:instance non-negative-self-dot
+                                     (x (add x y)))))))
+
+  (defthm three-sum-relations
+    (or (zero-polyp (add x y))
+        (< 0 (dot x (add x y)))
+        (< 0 (dot y (add x y))))
+    :rule-classes nil
+    :hints (("Goal" :in-theory (disable positive-self-dot)
+             :use (:instance positive-self-dot
+                             (x (add x y))))))
+
+  )
+
+(defthmd all-non-positive-summary
+  (implies
+   (all-non-positive (dot-list poly list))
+   (<= (dot poly (sum-polys list)) 0)))
+
+;;
+;; DAG -- oh .. this is a really nice result.
+;;
+(defthm three-sum-relations-generalization
+  (or (zero-polyp (sum-polys nbases))
+      (not (all-non-positive (dot-list (sum-polys nbases) nbases))))
+  :hints (("Subgoal *1/3" :use ((:instance three-sum-relations
+                                           (x (base->poly (car nbases)))
+                                           (y (sum-polys (cdr nbases))))
+                                (:instance all-non-positive-summary
+                                           (poly (add (base->poly (car nbases)) (sum-polys (cdr nbases))))
+                                           (list (cdr nbases)))))))
+
 (def::signatured sum-polys (t) poly-p)
 
 (defund non-nil-test (x)
   (declare (type t x))
   (not (not x)))
 
-;; 0 <= vector*(vector + delta)
-;; (- vector*vector) <= vector*delta
-(defmacro zero-delta (vector bases)
-  `(let ((vector ,vector)
-         (bases  ,bases))
-     (metlist ((nbases zbases pbases) (split-bases vector bases))
-       (declare (ignore zbases pbases))
-       (if (null nbases) vector
-         (let ((bases (cons (base 0 vector) nbases)))
-           (let ((bases (linearize-around-vector vector bases)))
-             (metlist ((unsat delta) (max-solution bases (zero-poly)))
-               (if (non-nil-test unsat) (poly-fix unsat) delta))))))))
-  
 (include-book "coi/defung/defung" :dir :system)
 
 (in-theory 
@@ -213,31 +281,82 @@
   BASE->POLY$INLINE-OF-BASE-FIX-BASE-INSTANCE-NORMALIZE-CONST
   ))
 
+;; 0 <= vector*(vector + delta)
+;; (- vector*vector) <= vector*delta
+(defmacro zero-delta (vector bases)
+  `(let ((vector ,vector)
+         (bases  ,bases))
+     (metlist ((nbases zbases pbases) (split-bases vector bases))
+       (declare (ignore zbases pbases))
+       (if (null nbases) vector
+         (let ((sln (weighted-vector vector nbases)))
+           ;; So what we could deduce is that this result will be
+           ;; negative (or positive) w/to all of the bases.  More to
+           ;; the point, if they are all orthoganal, the result will
+           ;; actually *be* the solution vector.
+           (let ((bases (cons (base 0 vector) nbases)))
+             (let ((bases (linearize-around-vector vector bases)))
+               ;; sln is (+) w/to all of the bases except vector.  I
+               ;; suspect that it will also make them "true" (nice
+               ;; opportunity for a proof, dude).  The resulting
+               ;; "sum-vector" will just be the vector.  There is also
+               ;; a good chance that zbases will be empty.  
+               ;;
+               ;; But .. wait .. what if it isn't?  What if the bases
+               ;; are orthoganal and, thus, every base is zero?  Then
+               ;; we will get a call of zero-delta with vector, all
+               ;; bases will be nbases, and we end up in an infinite
+               ;; loop.
+               ;;
+               ;; vector: -x -y -z
+               ;; nbases:  x
+               ;;             y
+               ;;                z
+               ;;   sln:   x  y  z
+               ;;
+               (metlist ((unsat delta) (max-solution bases sln))
+                 (if (non-nil-test unsat) (poly-fix unsat) delta)))))))))
+  
 (def::ung max-solution (bases sln)
   (declare (xargs :signature ((base-listp poly-p) t poly-p)
                   :default-value (mvlist (zero-poly) (zero-poly))
-                  ;;:congruences ((base-list-equiv poly-equiv) nil poly-equiv)
                   ))
-  ;;
-  ;; So we should probably have "a solution" and "the optimal"
-  ;; solution.
-  ;;
-  ;; The difference is that "a solution" uses a vector consisting of a
-  ;; sum of the negative components .. ie: it always tries to get
-  ;; closer to a failing constraint.  You might even weigh it by
-  ;; the alpha required to get there.  Or use the maximum.
-  ;;
-  ;; The optimal solution uses the gradiant as the vector ..  kinda
-  ;; like we do here.  But it also always preserves the current
-  ;; solution.
-  ;; 
-  ;;
   (metlist ((nbases zbases pbases) (split-bases sln bases))
     (declare (ignore pbases))
     (if (null nbases) (mvlist nil sln)
       (let ((vector (sum-polys nbases)))
+        ;;
+        ;; Of course this doesn't guarantee that
+        ;; the result will be any closer to any
+        ;; particular negative.
+        ;;
+        ;; To ensure that we would need to choose
+        ;; just *one* negative base.
+        ;;
+        ;; If we do that, is there a "best" base?
+        ;; One that "maximizes" the 
+        ;;
         (let ((delta (zero-delta vector (zeroize-biases zbases))))
           (if (zero-polyp delta) (mvlist delta sln)
             (let ((alpha (alpha sln delta bases)))
               (let ((sln (add sln (scale delta alpha))))
                 (max-solution bases sln)))))))))
+
+;;
+;; So we should probably have "a solution" and "the optimal"
+;; solution.
+;;
+;; The difference is that "a solution" uses a vector consisting of a
+;; sum of the negative components .. ie: it always tries to get
+;; closer to a failing constraint.  You might even weigh it by
+;; the alpha required to get there.  Or use the maximum.
+;;
+;; The optimal solution uses the gradiant as the vector ..  kinda
+;; like we do here.  But it also always preserves the current
+;; solution.
+;; 
+;;
+
+;; I think we might want to argue that any zero base that becomes
+;; positive will remain positive.
+
