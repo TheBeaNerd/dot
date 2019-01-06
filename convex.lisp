@@ -22,8 +22,7 @@
 
 (def::un residual (v b)
   (declare (xargs :signature ((poly-p poly-p) poly-p)
-                  :congruence ((poly-equiv poly-equiv) poly-equiv)
-                  :guard (not (zero-polyp b))))
+                  :congruence ((poly-equiv poly-equiv) poly-equiv)))
   ;; (v + ab)b = 0
   ;; vb + abb = 0
   ;; a = (- vb)/bb
@@ -394,8 +393,119 @@
 
   )
 
-dag
-  
+(def::un residual-list (p bases)
+  (declare (xargs :signature ((poly-p poly-listp) poly-listp)
+                  :congruence ((poly-equiv poly-list-equiv) equal)))
+  (if (not (consp bases)) nil
+    (let ((base (poly-fix (car bases)))
+          (p    (poly-fix p)))
+      (cons (residual base p)
+            (residual-list p (cdr bases))))))
+
+(def::signature residual-list (t t) poly-listp)
+
+(defthm len-residual-list
+  (equal (len (residual-list p list))
+         (len list)))
+
+(def::un basis-set (bases)
+  (declare (xargs :signature ((poly-listp) poly-listp)
+                  :congruence ((poly-list-equiv) equal)
+                  :congruence-hints ((and stable-under-simplificationp 
+                                          '(:expand ((basis-set bases)
+                                                     (basis-set bases-equal)))))
+                  :measure (len bases)))
+  (if (not (consp bases)) nil
+    (let ((basis (poly-fix (car bases))))
+      (let ((bases (residual-list basis (cdr bases))))
+        (cons basis (basis-set bases))))))
+
+(def::un residual-basis (z delta)
+  (declare (xargs :signature ((poly-p poly-p) poly-p)
+                  :congruence ((poly-equiv poly-equiv) poly-equiv)))
+  (add z (scale delta -1)))
+
+(def::signatured residual-basis (t t) poly-p)
+
+(def::un decompose-vector (z basis-list)
+  (declare (xargs :signature ((poly-p poly-listp) poly-p)
+                  :congruence ((poly-equiv poly-list-equiv) poly-equiv)))
+  (if (not (consp basis-list)) (zero-poly)
+    (let ((basis (poly-fix (car basis-list))))
+      (add (scale basis (coeff z basis))
+           (decompose-vector z (cdr basis-list))))))
+
+(def::signature decompose-vector (t t) poly-p)
+
+(def::un residual-basis-set (z bases)
+  (declare (xargs :signature ((poly-p poly-listp) poly-listp)
+                  :congruence ((poly-equiv poly-list-equiv) equal)
+                  :congruence-hints (("Goal" :in-theory (disable POLY-FIX-POLY-P)
+                                      :do-not-induct t)
+                                     (and stable-under-simplificationp
+                                          '(:in-theory (e/d (equal-to-poly-equiv)
+                                                            ()))))))
+  (let ((basis-list (basis-set bases)))
+    (let ((delta (decompose-vector z basis-list)))
+      (cons (residual-basis z delta) basis-list))))
+
+(def::signatured residual-basis-set (t t) poly-listp)
+
+(def::un decompose-vector-completely (z bases)
+  (declare (xargs :signature ((poly-p poly-listp) poly-p)
+                  :congruence ((poly-equiv poly-list-equiv) poly-equiv)))
+  (let ((basis-list (residual-basis-set z bases)))
+    (decompose-vector z basis-list)))
+
+(def::signatured decompose-vector-completely (t t) poly-p)
+
+(def::un disjoint-from-all (poly bases)
+  (declare (type t poly bases)
+           (xargs :congruence ((poly-equiv poly-list-equiv) equal)))
+  (if (not (consp bases)) t
+    (and (= (dot (poly-fix poly) (poly-fix (car bases))) 0)
+         (disjoint-from-all poly (cdr bases)))))
+
+(def::un mutually-disjoint (bases)
+  (declare (type t bases)
+           (xargs :congruence ((poly-list-equiv) equal)))
+  (if (not (consp bases)) t
+    (and (disjoint-from-all (poly-fix (car bases)) (cdr bases))
+         (mutually-disjoint (cdr bases)))))
+
+(defthm drop-irrelevant-addend
+  (implies
+   (disjoint-from-all x bases)
+   (equal (disjoint-from-all (add a (add b x)) bases)
+          (disjoint-from-all (add a b) bases))))
+
+(defthm equal-dot-scale-0
+  (iff (equal (dot (scale x a) y) 0)
+       (or (equal (rfix a) 0)
+           (equal (dot x y) 0))))
+
+(defthmd scaled-residual-basis-is-just-residual-basis
+  (implies
+   (equal (dot delta (add z (scale delta -1))) 0)
+   (poly-equiv (scale (residual-basis z delta) (coeff z (residual-basis z delta)))
+               (residual-basis z delta)))
+  :hints (("Goal" :do-not-induct t
+           :in-theory `(force
+                        scaled-remainder-is-just-the-remainder
+                        equal-dot-scale-0
+                        (:EQUIVALENCE POLY-EQUIV-IS-AN-EQUIVALENCE)
+                        residual-basis))))
+
+#|
+
+;; Yeah .. this proof should work ..
+(defthm three-way-decomposition
+  (poly-equiv z (decompose-vector-completely z (list p b)))
+  :hints (("Goal" :do-not-induct t
+           :expand (:free (x) (RESIDUAL-BASIS-SET Z x))
+           :in-theory (enable decompose-vector-completely))))
+
+
 (defthm three-way-decomposition
   (poly-equiv z (add (scale p (coeff z p))
                      (add (scale (residual b p) (coeff z (residual b p)))
@@ -416,7 +526,6 @@ dag
                                (:REWRITE ZERO-DOT-RESIDUAL)))))
 
 
-#|
 dag
 ;; Looks like we need to exclude the case of linearly-dependent vectors
 #+joe

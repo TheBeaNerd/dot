@@ -283,6 +283,30 @@
 
   )
 
+(defthm equal-poly-fix-to-poly-equiv
+  (iff (equal (poly-fix x) y)
+       (and (poly-p y)
+            (poly-equiv x y))))
+
+(defthmd poly-equiv-definition
+  (equal (poly-equiv x y)
+         (equal (poly-fix x)
+                (poly-fix y)))
+  :hints (("Goal" :in-theory (enable equal-poly-fix-to-poly-equiv))))
+
+(theory-invariant (incompatible (:rewrite poly-equiv-definition) (:rewrite equal-poly-fix-to-poly-equiv)))
+
+(defthmd equal-to-poly-equiv
+  (implies
+   (poly-p x)
+   (iff (equal x y)
+        (and (poly-p y)
+             (poly-equiv x y))))
+  :hints (("Goal" :in-theory (e/d (poly-equiv-definition)
+                                  (equal-poly-fix-to-poly-equiv)))))
+
+(theory-invariant (incompatible (:rewrite poly-equiv-definition) (:rewrite equal-to-poly-equiv)))
+
 (defun self-dot (x)
   (dot x x))
 

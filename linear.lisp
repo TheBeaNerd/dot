@@ -70,6 +70,8 @@
    (equal (disjoint-from-all (add a (add b x)) bases)
           (disjoint-from-all (add a b) bases))))
 
+#|
+
 (include-book "arithmetic-5/top" :dir :system)
 
 (defthm decomposition-is-disjoint-from-all-bases
@@ -123,8 +125,6 @@
     (let ((coeff (rfix (car coeffs))))
       (if (not (= coeff 0)) 0
         (1+ (find-first-non-zero-contribution (cdr coeffs)))))))
-
-#|
 
 (def::und make-skew ()
 
