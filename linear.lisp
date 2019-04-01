@@ -1,6 +1,7 @@
 (in-package "ACL2")
 
 (include-book "pot")
+(include-book "disjoint")
 
 ;; 1) skew/rewrite new vector
 ;; 2) decompose vector
@@ -50,26 +51,6 @@
     (add (scale (non-zero-poly-fix (car bases)) (rfix (car coeffs)))
          (reconstruct-poly (cdr coeffs) (cdr bases)))))
       
-(def::un disjoint-from-all (poly bases)
-  (declare (type t poly bases)
-           (xargs :congruence ((poly-equiv non-zero-poly-list-equiv) equal)))
-  (if (not (consp bases)) t
-    (and (= (dot (poly-fix poly) (non-zero-poly-fix (car bases))) 0)
-         (disjoint-from-all poly (cdr bases)))))
-
-(def::un mutually-disjoint (bases)
-  (declare (type t bases)
-           (xargs :congruence ((non-zero-poly-list-equiv) equal)))
-  (if (not (consp bases)) t
-    (and (disjoint-from-all (non-zero-poly-fix (car bases)) (cdr bases))
-         (mutually-disjoint (cdr bases)))))
-
-(defthm drop-irrelevant-addend
-  (implies
-   (disjoint-from-all x bases)
-   (equal (disjoint-from-all (add a (add b x)) bases)
-          (disjoint-from-all (add a b) bases))))
-
 #|
 
 (include-book "arithmetic-5/top" :dir :system)

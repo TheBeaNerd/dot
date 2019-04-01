@@ -46,6 +46,7 @@
 ;; focus on optimizing the computational process.
 
 (include-book "dot")
+(include-book "all")
 
 (fty::defprod+ base
  (
@@ -181,68 +182,28 @@
     (let ((base (base-fix! (car nbases))))
       (add (base->poly base) (sum-polys (cdr nbases))))))
 
-(def::un dot-list (vector list)
+;; If we know that all individually are (-) w/to a
+;; given vector then the sum must be (-) w/to that
+;; same vector.
+
+(def::un dot-base-list (vector list)
   (declare (xargs :signature ((poly-p base-listp) rational-listp)
                   :congruence ((poly-equiv base-list-equiv) equal)))
   (if (not (consp list)) nil
     (let ((base (base-fix! (car list))))
       (cons (dot vector (base->poly base))
-            (dot-list vector (cdr list))))))
+            (dot-base-list vector (cdr list))))))
 
-(def::un all-non-positive (list)
-  (declare (xargs :signature ((rational-listp) booleanp)
-                  :congruence ((rational-list-equiv) equal)))
-  (if (not (consp list)) t
-    (let ((entry (rfix (car list))))
-      (and (<= entry 0)
-           (all-non-positive (cdr list))))))
-
-(def::un all-negative (list)
-  (declare (xargs :signature ((rational-listp) booleanp)
-                  :congruence ((rational-list-equiv) equal)))
-  (if (not (consp list)) t
-    (let ((entry (rfix (car list))))
-      (and (< entry 0)
-           (all-negative (cdr list))))))
-
-;; If we know that all individually are (-) w/to a
-;; given vector then the sum must be (-) w/to that
-;; same vector.
-
-(defthm all-negative-dot-list
+(defthm all-negative-dot-base-list
   (implies
    (and
-    (all-negative (dot-list sln nbases))
+    (all-negative (dot-base-list sln nbases))
     (consp nbases))
    (< (dot sln (sum-polys nbases)) 0)))
  
-(encapsulate
-    ()
-
-  (local
-   (defthm sum-linear-relations
-     (implies
-      (and
-       (<= (dot x (add x y)) 0)
-       (<= (dot y (add x y)) 0))
-      (equal (dot (add x y) (add x y)) 0))
-     :hints (("Goal" :use (:instance non-negative-self-dot
-                                     (x (add x y)))))))
-
-  (defthm three-sum-relations
-    (or (zero-polyp (add x y))
-        (< 0 (dot x (add x y)))
-        (< 0 (dot y (add x y))))
-    :rule-classes nil
-    :hints (("Goal" :in-theory (disable positive-self-dot)
-             :use (:instance positive-self-dot
-                             (x (add x y))))))
-
-  )
-
 (defthmd all-non-positive-summary
   (implies
-   (all-non-positive (dot-list poly list))
+   (all-non-positive (dot-base-list poly list))
    (<= (dot poly (sum-polys list)) 0)))
 
 ;;
@@ -250,7 +211,7 @@
 ;;
 (defthm three-sum-relations-generalization
   (or (zero-polyp (sum-polys nbases))
-      (not (all-non-positive (dot-list (sum-polys nbases) nbases))))
+      (not (all-non-positive (dot-base-list (sum-polys nbases) nbases))))
   :hints (("Subgoal *1/3" :use ((:instance three-sum-relations
                                            (x (base->poly (car nbases)))
                                            (y (sum-polys (cdr nbases))))

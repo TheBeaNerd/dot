@@ -4,6 +4,7 @@
 (include-book "centaur/fty/deftypes" :dir :system)
 (include-book "coi/util/defun" :dir :system)
 (include-book "workshops/2018/greve-gacek/types" :dir :system)
+(include-book "ordinals/lexicographic-ordering" :dir :system)
 
 (defun add-rule-classes (name instance body)
   (if (not (consp body)) nil

@@ -3,22 +3,25 @@
 (include-book "dot")
 (include-book "reciprocal")
 (include-book "linearly-dependent")
+(include-book "disjoint")
 
-(defun unit-sum (p b)
-  ;; (p + ab)p = (p + ab)b
-  ;; pp + a(bp) = bp + a(bb)
-  ;; pp - bp = a(bb - bp)
-  ;; a = (pp - bp)/(bb - bp)
-  (let ((pp (dot p p))
-        (bb (dot b b))
-        (bp (dot b p)))
-    (if (= (- bb bp) 0) (zero-poly)
-      (let ((alpha (/ (- pp bp) (- bb bp))))
-        (add p (scale b alpha))))))
+(defthm equal-dot-scale-0
+  (iff (equal (dot (scale x a) y) 0)
+       (or (equal (rfix a) 0)
+           (equal (dot x y) 0))))
 
-(defthm unit-sum-property
-  (equal (dot p (unit-sum p b))
-         (dot b (unit-sum p b))))
+(defthm add-negative
+  (poly-equiv (add x (scale x -1))
+              (zero-poly))
+  :hints (("Goal" :in-theory (enable poly-equiv-reduction))))
+
+(defthm add-zero-poly
+  (poly-equiv (add (zero-poly) x)
+              x))
+
+;;
+;;
+;;
 
 (def::un residual (v b)
   (declare (xargs :signature ((poly-p poly-p) poly-p)
@@ -40,6 +43,8 @@
 ;;  |/
 ;;  +-------> x
 
+(local (in-theory (disable EXPT-MINUS FUNCTIONAL-COMMUTATIVITY-OF-MINUS-*-LEFT)))
+
 (defthm orthoganal-decomposition
   (poly-equiv z (add (scale             x  (coeff z x))
                      (scale (residual z x) (coeff z (residual z x)))))
@@ -49,13 +54,9 @@
                '(:in-theory (current-theory :here)
                  :cases ((linearly-dependent x z))))
           (and stable-under-simplificationp
-               '(:cases ((hide (rewrite-equiv (POLY-EQUIV X (SCALE Z (LINEARLY-DEPENDENT-WITNESS X Z))))))
-                        :in-theory (disable ZERO-POLYP-SCALE)))
-          (and stable-under-simplificationp
-               '(:expand (:free (x) (hide x)) :in-theory '(rewrite-equiv)))
-          (and stable-under-simplificationp
-               '(:in-theory (e/d (rfix LINEARLY-DEPENDENT ZERO-POLYP-definition) 
-                                 (ZERO-POLYP-SCALE))))
+               '(:use (:instance linearly-dependent-rewrite-equiv
+                                 (y z))
+                      :in-theory (disable ZERO-POLYP-SCALE)))
           ))
           
 (defthm orthoganal-decomposition-hyp
@@ -408,6 +409,17 @@
   (equal (len (residual-list p list))
          (len list)))
 
+(defthm disjoint-from-all-residual-list
+  (implies
+   (and
+    (equal (dot base x) 0)
+    (disjoint-from-all base list))
+   (disjoint-from-all base (residual-list x list)))
+  :hints (("Goal" :in-theory (enable residual))))
+
+(defthm disjoint-from-all-residual-list-same
+  (disjoint-from-all base (residual-list base list)))
+
 (def::un basis-set (bases)
   (declare (xargs :signature ((poly-listp) poly-listp)
                   :congruence ((poly-list-equiv) equal)
@@ -420,12 +432,15 @@
       (let ((bases (residual-list basis (cdr bases))))
         (cons basis (basis-set bases))))))
 
-(def::un residual-basis (z delta)
-  (declare (xargs :signature ((poly-p poly-p) poly-p)
-                  :congruence ((poly-equiv poly-equiv) poly-equiv)))
-  (add z (scale delta -1)))
+(defthm disjoint-from-all-bais-set
+  (implies
+   (disjoint-from-all base list)
+   (disjoint-from-all base (basis-set list))))
 
-(def::signatured residual-basis (t t) poly-p)
+(defthm mutually-disjoint-basis-set
+  (mutually-disjoint (basis-set list)))
+
+;; ----------------------------------------
 
 (def::un decompose-vector (z basis-list)
   (declare (xargs :signature ((poly-p poly-listp) poly-p)
@@ -437,97 +452,166 @@
 
 (def::signature decompose-vector (t t) poly-p)
 
-(def::un residual-basis-set (z bases)
-  (declare (xargs :signature ((poly-p poly-listp) poly-listp)
-                  :congruence ((poly-equiv poly-list-equiv) equal)
-                  :congruence-hints (("Goal" :in-theory (disable POLY-FIX-POLY-P)
-                                      :do-not-induct t)
-                                     (and stable-under-simplificationp
-                                          '(:in-theory (e/d (equal-to-poly-equiv)
-                                                            ()))))))
-  (let ((basis-list (basis-set bases)))
-    (let ((delta (decompose-vector z basis-list)))
-      (cons (residual-basis z delta) basis-list))))
+(defthm disjoint-from-all-dot-decompose-vector
+  (implies
+   (disjoint-from-all base list)
+   (equal (dot base (decompose-vector z list))
+          0)))
 
-(def::signatured residual-basis-set (t t) poly-listp)
+(defthm disjoint-from-all-coeff-decompose-vector
+  (implies
+   (disjoint-from-all base list)
+   (equal (coeff (decompose-vector z list) base)
+          0))
+  :hints (("Goal" :in-theory (enable coeff))))
 
-(def::un decompose-vector-completely (z bases)
+(defthmd mutually-disjoint-dot-decompose-vector
+  (implies
+   (mutually-disjoint list)
+   (equal (dot x (decompose-vector z list))
+          (dot (decompose-vector x list)
+               (decompose-vector z list))))
+  :hints (("Goal" :in-theory (disable EQUALITY-PROMOTE-DENOMINATORS))
+          ("Subgoal *1/3'" :in-theory (enable coeff))))
+
+
+(defthm mutually-disjoint-dot-decompose-vector-id
+  (implies
+   (force (mutually-disjoint list))
+   (equal (dot z (decompose-vector z list))
+          (dot (decompose-vector z list)
+               (decompose-vector z list))))
+  :hints (("Goal" :use (:instance mutually-disjoint-dot-decompose-vector
+                                  (x z)))))
+
+(defthm dot-decompose-vector-positive
+  (implies
+   (mutually-disjoint list)
+   (<= 0 (dot z (decompose-vector z list))))
+  :hints (("Goal" :in-theory (disable decompose-vector)))
+  :rule-classes (:rewrite :linear))
+
+;; ----------------------------------------
+
+(def::un residual-basis (z basis-set)
   (declare (xargs :signature ((poly-p poly-listp) poly-p)
                   :congruence ((poly-equiv poly-list-equiv) poly-equiv)))
-  (let ((basis-list (residual-basis-set z bases)))
-    (decompose-vector z basis-list)))
+  (let ((delta (decompose-vector z basis-set)))
+    (add z (scale delta -1))))
+
+(defthm disjoint-from-all-residual-basis
+  (implies
+   (mutually-disjoint basis-set)
+   (disjoint-from-all (residual-basis z basis-set) basis-set))
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(defthmd mutually-disjoint-dot-residual-basis
+  (implies
+   (mutually-disjoint list)
+   (equal (dot z (residual-basis x list))
+          (dot (residual-basis x list)
+               (residual-basis z list))))
+  :hints (("Goal" :do-not-induct t
+           :use (:instance mutually-disjoint-dot-decompose-vector))))
+
+(defthm mutually-disjoint-dot-residual-basis-id
+  (implies
+   (mutually-disjoint list)
+   (equal (dot z (residual-basis z list))
+          (dot (residual-basis z list)
+               (residual-basis z list))))
+  :hints (("Goal" :use (:instance mutually-disjoint-dot-residual-basis
+                                  (x z)))))
+
+(defthm dot-residual-basis-positive
+  (implies
+   (mutually-disjoint list)
+   (<= 0 (dot z (residual-basis z list))))
+  :hints (("Goal" :in-theory (disable residual-basis)))
+  :rule-classes (:rewrite :linear))
+
+(def::signatured residual-basis (t t) poly-p)
+
+(defthm zero-inner-product
+  (implies
+   (mutually-disjoint basis-list)
+   (equal (dot (decompose-vector z basis-list)
+               (residual-basis z basis-list))
+          0))
+  :hints (("Goal" :in-theory (enable residual-basis))))
+
+;; ----------------------------------------
+
+(def::un decompose-vector-completely (z basis-list)
+  (declare (xargs :signature ((poly-p poly-listp) poly-p)
+                  :congruence ((poly-equiv poly-list-equiv) poly-equiv)))
+  (let ((delta (decompose-vector z basis-list)))
+    (add delta (residual-basis z basis-list))))
 
 (def::signatured decompose-vector-completely (t t) poly-p)
 
-(def::un disjoint-from-all (poly bases)
-  (declare (type t poly bases)
-           (xargs :congruence ((poly-equiv poly-list-equiv) equal)))
-  (if (not (consp bases)) t
-    (and (= (dot (poly-fix poly) (poly-fix (car bases))) 0)
-         (disjoint-from-all poly (cdr bases)))))
-
-(def::un mutually-disjoint (bases)
-  (declare (type t bases)
-           (xargs :congruence ((poly-list-equiv) equal)))
-  (if (not (consp bases)) t
-    (and (disjoint-from-all (poly-fix (car bases)) (cdr bases))
-         (mutually-disjoint (cdr bases)))))
-
-(defthm drop-irrelevant-addend
+(defthmd multi-way-decomposition
   (implies
-   (disjoint-from-all x bases)
-   (equal (disjoint-from-all (add a (add b x)) bases)
-          (disjoint-from-all (add a b) bases))))
+   (mutually-disjoint basis-list)
+   (poly-equiv (decompose-vector-completely z basis-list) z))
+  :hints (("Goal" :do-not-induct t
+           :in-theory (enable decompose-vector-completely))
+          (and stable-under-simplificationp
+               '(:in-theory (enable residual-basis)))))
 
-(defthm equal-dot-scale-0
-  (iff (equal (dot (scale x a) y) 0)
-       (or (equal (rfix a) 0)
-           (equal (dot x y) 0))))
+(local
+ (in-theory (e/d (residual-basis decompose-vector-completely) 
+                 (MUTUALLY-DISJOINT-DOT-DECOMPOSE-VECTOR-id
+                  multi-way-decomposition decompose-vector))))
 
-(defthmd scaled-residual-basis-is-just-residual-basis
+(defthmd three-way-decomposition
+  (hide (rewrite-equiv (poly-equiv z (decompose-vector-completely (hide z) (basis-set (list p b))))))
+  :hints (("Goal" :in-theory (enable multi-way-decomposition)
+           :expand (:free (x) (hide x)))))
+
+(defcong poly-equiv poly-list-equiv (cons a x) 1)
+(defcong poly-list-equiv poly-list-equiv (cons a x) 2)
+
+(defthm poly-list-fix-cons
+  (equal (poly-list-fix (cons x list))
+         (cons (poly-fix x)
+               (poly-list-fix list))))
+
+(defthm dot-member-residual-basis
   (implies
-   (equal (dot delta (add z (scale delta -1))) 0)
-   (poly-equiv (scale (residual-basis z delta) (coeff z (residual-basis z delta)))
-               (residual-basis z delta)))
-  :hints (("Goal" :do-not-induct t
-           :in-theory `(force
-                        scaled-remainder-is-just-the-remainder
-                        equal-dot-scale-0
-                        (:EQUIVALENCE POLY-EQUIV-IS-AN-EQUIVALENCE)
-                        residual-basis))))
+   (and
+    (member-equal (poly-fix p) (poly-list-fix list))
+    (mutually-disjoint list))
+   (equal (dot p (residual-basis z list))
+          0))
+  :hints (("Goal" :in-theory (enable 
+                              decompose-vector
+                              residual-basis
+                              list::memberp
+                              coeff
+                              ))))
 
-#|
+(defthmd dot-unhide-expanded-vectors
+  (implies
+   (syntaxp (or (equal z 'b) (equal z 'z)))
+   (and (equal (dot (hide z) x)
+               (dot z x))
+        (equal (dot x (hide z))
+               (dot x z))))
+  :hints (("Goal" :expand (:free (x) (hide x)))))
 
-;; Yeah .. this proof should work ..
-(defthm three-way-decomposition
-  (poly-equiv z (decompose-vector-completely z (list p b)))
-  :hints (("Goal" :do-not-induct t
-           :expand (:free (x) (RESIDUAL-BASIS-SET Z x))
-           :in-theory (enable decompose-vector-completely))))
+(defthmd coeff-unhide-expanded-vectors
+  (implies
+   (syntaxp (or (equal z 'b) (equal z 'z)))
+   (equal (coeff (hide z) x)
+          (coeff z x)))
+  :hints (("Goal" :expand (:free (x) (hide x)))))
 
+(defthm double-residual
+  (poly-equiv (residual (residual x p) p)
+              (residual x p))
+  :hints (("Goal" :in-theory (enable residual))))
 
-(defthm three-way-decomposition
-  (poly-equiv z (add (scale p (coeff z p))
-                     (add (scale (residual b p) (coeff z (residual b p)))
-                          (scale (residual (residual z p) (residual b p))
-                                 (coeff (residual z p) (residual (residual z p) (residual b p)))))))
-  :hints (("Goal" :in-theory `((:CONGRUENCE POLY-EQUIV-IMPLIES-POLY-EQUIV-ADD-2)
-                               (:DEFINITION RESIDUAL)
-                               (:EQUIVALENCE POLY-EQUIV-IS-AN-EQUIVALENCE)
-                               (:FORWARD-CHAINING T-T-IMPLIES-RATIONALP-COEFF)
-                               (:REWRITE ADD-ADD-COMMUTE)
-                               (:REWRITE ADD-COMMUTE)
-                               (:REWRITE ADD-OPPOSITES)
-                               ;(:REWRITE ADD-ZERO)
-                               (:REWRITE COEFF-ADD)
-                               (:rewrite coeff-zero)
-                               (:REWRITE RFIX-RATIONALP)
-                               (:REWRITE SCALED-REMAINDER-IS-JUST-THE-REMAINDER)
-                               (:REWRITE ZERO-DOT-RESIDUAL)))))
-
-
-dag
-;; Looks like we need to exclude the case of linearly-dependent vectors
 #+joe
 (defthm fred
   (implies
@@ -536,33 +620,41 @@ dag
     (< (dot p s) 0)
     (< (dot p b) 0)
     (< (dot (residual b p) s) 0)
+    (zero-polyp (residual-basis s (basis-set (list p b))))
     )
    (not
     (and
-     (not (zero-polyp z))
-     (<= 0 (dot b z))
-     (<= 0 (dot p z))
-     (<= 0 (dot s z))
+     ;;(not (zero-polyp z))
+     (< 0 (dot b z))
+     (< 0 (dot p z))
+     (< 0 (dot s z))
      )))
-  :hints (("Goal" :use ((:instance orthoganal-decomposition-hyp
-                                   (z b)
-                                   (x p))
-                        (:instance orthoganal-decomposition-hyp
-                                   (z z)
-                                   (x b))
-                        ))
+  :hints (("Goal" :use (:instance orthoganal-decomposition-hyp
+                                  (z b)
+                                  (x p)))
           (and stable-under-simplificationp
-               '(:in-theory (enable coeff)))
+               '(:in-theory (enable bag::memberp
+                                    decompose-vector-completely)
+                            :expand ((:free (x) (basis-set x))
+                                     )
+                            :use ((:instance three-way-decomposition
+                                             (b (hide b)))
+                                  (:instance three-way-decomposition
+                                             (z s)
+                                             (b (hide b)))
+                                  )))
+          (and stable-under-simplificationp
+               '(:in-theory (enable 
+                             bag::memberp 
+                             coeff-unhide-expanded-vectors
+                             decompose-vector-completely
+                             )))
           #+joe
           (and stable-under-simplificationp
-               '(:expand ((hide z) (hide b))
-                         :in-theory (enable coeff)))
-          #+joe
-          (and stable-under-simplificationp
-               '(:in-theory (enable rewrite-hide-poly-equiv)))
-          #+joe
-          (and stable-under-simplificationp
-               '(:expand ((:free (x) (hide x)))))
-          )
-  :rule-classes nil)
-|#
+               '(:in-theory (enable 
+                             bag::memberp 
+                             dot-unhide-expanded-vectors
+                             coeff-unhide-expanded-vectors
+                             )))
+          ))
+
