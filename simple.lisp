@@ -93,6 +93,10 @@
           (if (< 0 score) (split-bases-rec vector (cdr bases) nbases zbases (cons base pbases))
             (split-bases-rec vector (cdr bases) nbases (cons base zbases) pbases)))))))
 
+(defmacro split (vector bases &key (nset 'nil) (zset 'nil) (pset 'nil))
+  `(metlist ((n z p) (split-bases-rec ,vector ,bases ,nset ,zset ,pset))
+     (mv n z p)))
+
 (def::und split-bases (vector bases)
   (declare (xargs :signature ((poly-p base-listp)  base-listp base-listp base-listp)
                   :congruence ((poly-equiv base-list-equiv) base-list-equiv base-list-equiv base-list-equiv)))

@@ -288,6 +288,12 @@
 (def::signature append (poly-listp poly-listp) poly-listp)
 (def::signature revappend (poly-listp poly-listp) poly-listp)
 
+(defthm poly-listp-implies-true-listp
+  (implies
+   (poly-listp x)
+   (true-listp x))
+  :rule-classes (:forward-chaining))
+
 (def::un zero-poly-fix (x)
   (declare (xargs :signature ((t) zero-polyp)
                   :congruence ((poly-equiv) poly-equiv)))
@@ -495,3 +501,9 @@
     (let ((base (poly-fix (car list))))
       (cons (dot (poly-fix vector) base)
             (dot-list vector (cdr list))))))
+
+(defthm dot-list-append
+  (equal (dot-list poly (append x y))
+         (append (dot-list poly x)
+                 (dot-list poly y))))
+

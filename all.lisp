@@ -25,3 +25,36 @@
     (let ((entry (rfix (car list))))
       (and (< entry 0)
            (all-negative (cdr list))))))
+
+(def::un all-positive (list)
+  (declare (xargs :signature ((rational-listp) booleanp)
+                  :congruence ((rational-list-equiv) equal)))
+  (if (not (consp list)) t
+    (let ((entry (rfix (car list))))
+      (and (< 0 entry)
+           (all-positive (cdr list))))))
+
+(def::un all-zero (list)
+  (declare (xargs :signature ((rational-listp) booleanp)
+                  :congruence ((rational-list-equiv) equal)))
+  (if (not (consp list)) t
+    (let ((entry (rfix (car list))))
+      (and (equal 0 entry)
+           (all-zero (cdr list))))))
+
+(defthm all-positive-implies-all-non-negative
+  (implies
+   (all-positive list)
+   (all-non-negative list))
+  :rule-classes (:forward-chaining))
+
+(defthm all-positive-append
+  (equal (all-positive (append x y))
+         (and (all-positive x)
+              (all-positive y))))
+
+(defthm all-zero-append
+  (equal (all-zero (append x y))
+         (and (all-zero x)
+              (all-zero y))))
+

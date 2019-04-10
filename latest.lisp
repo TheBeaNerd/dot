@@ -1,7 +1,12 @@
 (in-package "ACL2")
 
-(include-book "convex")
-(include-book "all")
+(include-book "residual")
+
+#|
+
+;; Can you include only bases with (-) contribution?
+;; - I think not .. 
+
 
 ;; If the new basis is positive w/to an existing basis, it replaces the basis.
 ;; If the new basis is (-) w/to an existing basis, 
@@ -64,7 +69,6 @@
                (residual-basis z list))))
   :hints (("Goal" :use mutually-disjoint-dot-residual-basis)))
 
-#|
 ;; And we're back .. remember this?
 ;;
 ;; - two opposing basis vectors .. pinching the solution.
