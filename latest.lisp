@@ -1,6 +1,57 @@
 (in-package "ACL2")
 
 (include-book "residual")
+(include-book "visualize")
+
+(in-theory (disable FIND-RESIDUAL-DOMAIN-DEFINITION))
+
+(defthm val-0-find-residual
+  (iff (val 0 (find-residual residual nset zset pset v0))
+       (find-residual-domain residual nset zset pset v0))
+  :otf-flg t
+  :hints ((and stable-under-simplificationp
+               '(:in-theory (disable FIND-RESIDUAL-DEFINITION)))))
+
+(defthm all-zero-dot-zero-poly
+  (implies
+   (zero-polyp poly)
+   (all-zero (dot-list poly list))))
+
+(defthm dot-list-revappend
+  (equal (dot-list x (revappend a b))
+         (revappend (dot-list x a)
+                    (dot-list x b))))
+
+(defthm primary-invariant
+  (implies
+   (and
+    (find-residual-domain residual nset zset pset v0)
+    (< 0 (dot residual v0))
+    (all-negative (dot-list residual nset))
+    (all-zero     (dot-list residual zset))
+    (all-positive (dot-list residual pset)))
+   (and
+    (or (zero-polyp (val 1 (find-residual residual nset zset pset v0)))
+        (< 0 (dot (val 1 (find-residual residual nset zset pset v0)) v0)))
+    (all-zero     (dot-list (val 1 (find-residual residual nset zset pset v0))
+                            (val 2 (find-residual residual nset zset pset v0))))
+    (all-positive (dot-list (val 1 (find-residual residual nset zset pset v0))
+                            (val 3 (find-residual residual nset zset pset v0))))
+    ))
+  :rule-classes nil
+  :hints (("Goal" :do-not-induct t
+           :induct (find-residual residual nset zset pset v0)
+           :in-theory (e/d (all-positive-to-all-positive
+                            ) (FIND-RESIDUAL-DEFINITION)))
+          ))
+
+          (and (< 0 (car (car id)))
+               '(:do-not-induct t
+                 :in-theory (disable FIND-RESIDUAL-DEFINITION
+                                     (force))))))
+
+              
+
 
 #|
 

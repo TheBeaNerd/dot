@@ -18,6 +18,27 @@
 (defmacro split (vector bases &key (nset 'nil) (zset 'nil) (pset 'nil))
   `(split-bases-rec ,vector ,bases ,nset ,zset ,pset))
 
+(defthm split-bases-contract-0
+  (implies
+   (force (all-negative (dot-list vector nbases)))
+   (all-negative (dot-list vector (val 0 (split-bases-rec vector bases nbases zbases pbases)))))
+  :hints (("Goal" :in-theory (enable all-positive
+                                     split-bases-rec))))
+
+(defthm split-bases-contract-1
+  (implies
+   (force (all-zero     (dot-list vector zbases)))
+   (all-zero (dot-list vector (val 1 (split-bases-rec vector bases nbases zbases pbases)))))
+  :hints (("Goal" :in-theory (enable all-positive
+                                     split-bases-rec))))
+
+(defthm split-bases-contract-2
+  (implies
+   (force (all-positive (dot-list vector pbases)))
+   (all-positive (dot-list vector (val 2 (split-bases-rec vector bases nbases zbases pbases)))))
+  :hints (("Goal" :in-theory (enable all-positive
+                                     split-bases-rec))))
+
 ;; The vector needs to be non-negative w/to *all* bases
 ;; - when we add a base, we cannot make any existing base (-)
 ;;
@@ -177,11 +198,35 @@
     (<= 0 coeff)
     (all-negative (dot-list bprime zres))
     (all-positive (dot-list residual zres))
-    (all-positive (dot-list residual pres))
+    ;;(all-positive (dot-list residual pres))
     (all-zero (dot-list (add residual (scale bprime coeff)) zres))
-    (all-positive (dot-list (add residual (scale bprime coeff)) pres)))
+    ;;(all-positive (dot-list (add residual (scale bprime coeff)) pres)))
+    )
    (all-zero (dot-list (add residual (scale bprime (val 0 (maximum-nneg-coeff residual bprime coeff pset zres pres)))) 
                        (val 1 (maximum-nneg-coeff residual bprime coeff pset zres pres)))))
+  :hints (("Goal" :induct (maximum-nneg-coeff residual bprime coeff pset zres pres)
+           :do-not '(generalize)
+           :in-theory (enable coeff <---promote-denominators coeff <-+-promote-denominators)
+           :nonlinearp t
+           :do-not-induct t)))
+
+;; DAG: Here we are stuck
+
+dag
+(defthm all-positive-maximum-nneg-coeff
+  (implies
+   (and
+    (all-positive (dot-list residual pset))
+    (rationalp coeff)
+    (<= 0 coeff)
+    ;;(all-negative (dot-list bprime zres))
+    ;;(all-positive (dot-list residual zres))
+    (all-positive (dot-list residual pres))
+    ;;(all-zero (dot-list (add residual (scale bprime coeff)) zres))
+    (all-positive (dot-list (add residual (scale bprime coeff)) pres))
+    )
+   (all-positive (dot-list (add residual (scale bprime (val 0 (maximum-nneg-coeff residual bprime coeff pset zres pres)))) 
+                           (val 2 (maximum-nneg-coeff residual bprime coeff pset zres pres)))))
   :hints (("Goal" :induct (maximum-nneg-coeff residual bprime coeff pset zres pres)
            :do-not '(generalize)
            :in-theory (enable coeff <---promote-denominators coeff <-+-promote-denominators)

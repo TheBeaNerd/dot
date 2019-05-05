@@ -58,3 +58,26 @@
          (and (all-zero x)
               (all-zero y))))
 
+(defthm all-negative-append
+  (equal (all-negative (append x y))
+         (and (all-negative x)
+              (all-negative y))))
+
+(defthm all-positive-revappend
+  (equal (all-positive (revappend x y))
+         (and (all-positive x)
+              (all-positive y)))
+  :hints (("Goal" :induct (revappend x y))))
+
+(defthm all-zero-revappend
+  (equal (all-zero (revappend x y))
+         (and (all-zero x)
+              (all-zero y)))
+  :hints (("Goal" :induct (revappend x y))))
+
+(defthm all-negative-revappend
+  (equal (all-negative (revappend x y))
+         (and (all-negative x)
+              (all-negative y)))
+  :hints (("Goal" :induct (revappend x y))))
+
