@@ -79,9 +79,10 @@
            (xargs :congruence ((basis-list-equiv) equal)))
   (if (not (consp bases)) t
     (let ((basis (basis-fix! (car bases))))
-      (and (equal (len (basis->coeffs basis)) (len (cdr bases)))
+      (and (not (zero-polyp (basis->base basis)))
+           (equal (len (basis->coeffs basis)) (len (cdr bases)))
            (all-zero (dot-list (basis->base basis)
-                               (basis-list-polys (cdr bases))))
+                               (basis-list-bases (cdr bases))))
            (poly-equiv (basis->poly basis)
                        (add (basis->base basis)
                             (reconstruct-partial  
@@ -191,4 +192,208 @@
    (poly-equiv (add (val 0 (poly-representation poly bases)) 
                     (reconstruct-partial (val 1 (poly-representation poly bases)) bases))
                poly)))
+
+(defthm len-poly-representation-coeffs
+  (equal (len (val 1 (poly-representation poly bases)))
+         (len bases)))
+
+(defthm poly-representation-scale
+  (poly-equiv (val 0 (poly-representation (scale p a) bases))
+              (scale (val 0 (poly-representation p bases))
+                     a)))
+
+;; 
+
+;; (defthm equiv-in-terms-of-base
+;;   (poly-equiv (basis->base (car bases))
+;;               (add (basis->poly basis)
+;;                    (scale (reconstruct-partial  
+;;                            (basis->coeffs basis) 
+;;                            (basis-list-fix (cdr bases))) -1)))
+
+;;   :hints ((rewrite-equiv-hint poly-equiv)
+;;           (and stable-under-simplificationp
+;;                '(:in-theory (enable poly-equiv-reduction)))))
+
+;; So 
+
+(defthm dot-base-reconstruct-partial-polys
+  (implies
+   (and
+    (wf-basis-list bases)
+    (all-zero (dot-list base (basis-list-polys bases))))
+   (equal (dot base (reconstruct-partial coeffs bases)) 0)))
+
+(include-book "coi/util/rewrite-equiv" :dir :system)
+
+(defthm all-zero-dot-list-basis-list-polys
+  (implies
+   (and
+    (all-zero (dot-list base (basis-list-bases bases)))
+    (wf-basis-list bases))
+   (all-zero (dot-list base (basis-list-polys bases))))
+  :rule-classes (:rewrite :forward-chaining)
+  :hints ((rewrite-equiv-hint poly-equiv)))
+
+(defthm dot-disjoint-base-poly-representation
+  (implies
+   (all-zero (dot-list base (basis-list-polys bases)))
+   (equal (dot base (val 0 (poly-representation poly bases)))
+          (dot base poly))))
+
+(defthm poly-representation-disjoint-poly
+  (implies
+   (all-zero (dot-list poly (basis-list-bases bases)))
+   (poly-equiv (val 0 (poly-representation poly bases))
+               poly)))
+
+(defthm add-scale-2
+  (implies
+   (rfix-equiv r (double-rewrite (+ (rfix a) (rfix b))))
+   (poly-equiv (add (scale p a)
+                    (add (scale p b)
+                         z))
+               (add (scale p r) z))))
+
+(defthm add-scale-1
+  (implies
+   (rfix-equiv r (double-rewrite (+ (rfix a) (rfix b))))
+   (poly-equiv (add (scale p a)
+                    (scale p b))
+               (scale p r))))
+
+(defthm add-scale-0
+  (implies
+   (rfix-equiv r (double-rewrite (+ 1 (rfix a))))
+   (poly-equiv (add p (scale p a))
+               (scale p r)))
+  :hints (("Goal" :in-theory (e/d (poly-equiv-reduction)
+                                  (add-scale-1)))))
+
+(defthm poly-representation-zero-poly
+  (implies
+   (zero-polyp z)
+   (poly-equiv (val 0 (poly-representation z bases))
+               (zero-poly))))
+
+(in-theory (disable SCALE-PLUS))
+
+(include-book "arithmetic-5/top" :dir :system)
+
+(defthm poly-equiv-add-same
+  (iff (poly-equiv (add base x)
+                   (add base y))
+       (poly-equiv x y))
+  :hints (("Subgoal 1" :in-theory (disable  POLY-EQUIV-IMPLIES-EQUAL-DOT-2)
+           :use ((:instance POLY-EQUIV-REDUCTION)
+                 (:instance poly-equiv-implication
+                            (x (add base x))
+                            (y (add base y))
+                            (k (POLY-EQUIV-WITNESS X Y)))))))
+
+(defthm poly-equiv-add-base
+  (iff (poly-equiv (add base x)
+                   base)
+       (zero-polyp x))
+  :hints (("Goal" :cases ((zero-polyp base)))
+          ("Subgoal 2.1" :in-theory (disable POLY-EQUIV-IMPLIES-EQUAL-DOT-2
+                                             POLY-EQUIV-IMPLIES-EQUAL-DOT-1)
+           :use ((:instance POLY-EQUIV-IMPLIES-EQUAL-DOT-1
+                            (x base)
+                            (x-equiv (add base x))
+                            (y x))))))
+
+(defthmd zero-polyp-dot-k
+  (implies
+   (zero-polyp x)
+   (equal (dot k x) 0)))
+
+(defthm zero-polyp-scale
+  (iff (zero-polyp (scale poly a))
+       (or (zero-polyp poly)
+           (equal (rfix a) 0)))
+  :hints (("Subgoal 3" :use (:instance zero-polyp-dot-k
+                                       (x (scale poly a))
+                                       (k poly)))
+          ("Subgoal 1" :in-theory (enable ZERO-POLYP-DEFINITION
+                                          poly-equiv-reduction))))
+
+(defthm zero-polyp-add
+  (iff (zero-polyp (add x y))
+       (poly-equiv x (scale y -1)))
+  :hints (("Goal" :in-theory (enable ZERO-POLYP-DEFINITION))
+          (skosimp-inst)))
+
+(defthmd all-zero-dot-list-scale
+  (iff (all-zero (dot-list (scale p a) list))
+       (or (equal (rfix a) 0)
+           (all-zero (dot-list p list))))
+  :hints (("Goal" :in-theory (e/d (rfix-equiv)
+                                  (EQUAL-RFIX-TO-RFIX-EQUIV)))))
+
+(defthm all-zero-dot-list-scale-case-split
+  (implies
+   (case-split (not (equal (rfix a) 0)))
+   (iff (all-zero (dot-list (scale p a) list))
+        (all-zero (dot-list p list))))
+  :hints (("Goal" :in-theory (enable all-zero-dot-list-scale))))
+
+(defthm all-zero-dot-list-add
+  (implies
+   (all-zero (dot-list base basis-list))
+   (iff (all-zero (dot-list (add poly base) basis-list))
+        (all-zero (dot-list poly basis-list)))))
+
+(defthm coeff-poly-base
+  (implies
+   (and
+    (POLY-EQUIV poly (ADD base (RECONSTRUCT-PARTIAL coeffs bases)))
+    (wf-basis-list bases)
+    (all-zero (dot-list base (basis-list-bases bases))))
+   (equal (coeff poly base) 
+          (if (or (zero-polyp poly) (zero-polyp base)) 0 1)))
+  :hints (("Goal" :induct (RECONSTRUCT-PARTIAL coeffs bases)
+           :do-not-induct t)))
+
+(defthm poly-equiv-scale-zero-poly
+  (iff (poly-equiv (scale p a) (zero-poly))
+       (or (equal (rfix a) 0)
+           (poly-equiv p (zero-poly))))
+  :hints ((skosimp-inst)))
+
+(defthm val0-poly-representation-reconstruct-partial
+  (implies
+   (wf-basis-list bases)
+   (poly-equiv (val 0 (poly-representation (reconstruct-partial coeffs bases) bases))
+               (zero-poly)))
+  :hints (("Goal" :induct (reconstruct-partial coeffs bases)
+           :do-not-induct t)
+          (and stable-under-simplificationp
+               '(:expand (:free (poly) (POLY-REPRESENTATION poly BASES))))
+          ;;(rewrite-equiv-hint poly-equiv)))
+          ))
+
+(defthm denormal-coeff
+  (equal (* (coeff poly base)
+            (dot base base))
+         (dot poly base))
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(defthm zero-coeff-to-zero-dot
+  (implies
+   (case-split (not (zero-polyp base)))
+   (iff (equal (coeff poly base) 0)
+        (equal (dot poly base) 0)))
+  :hints (("Goal" :in-theory (enable coeff))))
+
+(defthm all-zero-dot-list-base-poly-representation
+  (implies
+   (wf-basis-list bases)
+   (all-zero (dot-list (val 0 (poly-representation poly bases))
+                       (basis-list-bases bases))))
+  :rule-classes (:rewrite (:forward-chaining :trigger-terms ((poly-representation poly bases))))
+  :hints (("Goal" :induct (poly-representation poly bases)
+           :in-theory (e/d (rfix-equiv)
+                           (EQUAL-RFIX-TO-RFIX-EQUIV)))
+          (rewrite-equiv-hint poly-equiv)))
 

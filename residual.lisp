@@ -212,7 +212,7 @@
 
 ;; DAG: Here we are stuck
 
-dag
+#|
 (defthm all-positive-maximum-nneg-coeff
   (implies
    (and
@@ -293,7 +293,6 @@ dag
                           (metlist ((nset zset pset) (split residual (cdr nset) :zset (cons b zset) :pset pset))
                             (find-residual residual nset zset pset v0))))))))))))))))
   
-#|
 
 ;; Can you include only bases with (-) contribution?
 ;; - I think not .. 
