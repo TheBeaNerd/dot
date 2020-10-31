@@ -499,15 +499,15 @@
                   :signature-hints (("Goal" :do-not-induct t))))
   (let ((coeff (coeff poly (basis->base basis))))
     (if (<= 0 coeff) (mv basis bases)
-      (metlist ((base coeffs) (poly-representation poly bases))
+      (metlist ((poly-base coeffs) (poly-representation poly bases))
         ;; Technically just compensating for the magnitude of base
-        (let ((coeff (coeff (basis->base basis) base)))
-          (let ((basis->base  (add (basis->base basis) (scale base (- coeff))))
+        (let ((coeff (coeff (basis->base basis) poly-base)))
+          (let ((basis->base  (add (basis->base basis) (scale poly-base (- coeff))))
                 (basis->coeff (cons coeff (add-coefficients (basis->coeffs basis) (scale-coefficients (- coeff) coeffs))))
                 (basis->poly  (basis->poly basis)))
             (if (zero-polyp basis->base) (mv basis bases)
               (mv (basis basis->base basis->coeff basis->poly)
-                  (cons (basis base coeffs poly) bases)))))))))
+                  (cons (basis poly-base coeffs poly) bases)))))))))
 
 (defthm all-zero-dot-list-add-2
   (implies (all-zero (dot-list base basis-list))
@@ -555,3 +555,322 @@
   :hints (("Goal" :in-theory (e/d (rfix-equiv)
                                   (equal-rfix-TO-RFIX-EQUIV))
            :do-not-induct t)))
+
+;; To remove a base, we eliminate its 
+;;
+;;    P0 =  B0
+;; ^  P1 = c10  B1
+;; |  P2 = c20 c21  B2
+;;    P3 = c30 c31 c32  B3
+;;                <--
+
+(def::und extract-nth (n coeffs)
+  (declare (xargs :signature ((natp rational-listp) rationalp rational-listp)))
+  (if (not (consp coeffs)) (mv 0 nil)
+    (if (zp n) (mv (rfix (car coeffs)) (cdr coeffs))
+      (extract-nth (1- (nfix n)) (cdr coeffs)))))
+
+(def::und drop-nth-poly-basis (n nth-poly basis)
+  (declare (xargs :signature ((natp poly-p basis-p) basis-p)))
+  (let ((coeffs (basis->coeffs basis))
+        (base   (basis->base   basis))
+        (poly   (basis->poly   basis)))
+    (met ((m coeffs) (extract-nth n coeffs))
+      (let ((base (add base (scale nth-poly m))))
+        (basis base coeffs poly)))))
+
+(def::signature drop-nth-poly-basis (t t t) basis-p
+  :hints (("Goal" :in-theory (enable drop-nth-poly-basis))))
+
+(defthm wf-basis-drop-nth-poly-basis
+  (implies
+   (and
+    (wf-basis-p basis)
+    (equal (dot nth-poly (basis->base basis)) 0))
+   (wf-basis-p (drop-nth-poly-basis n nth-poly basis)))
+  :hints (("Goal" :in-theory (enable drop-nth-poly-basis))))
+
+(def::un drop-nth-poly (n nth-poly bases)
+  (declare (xargs :signature ((natp poly-p basis-listp) basis-listp)))
+  (if (not (consp bases)) nil
+    (if (zp n) (cdr bases)
+      (let ((basis (drop-nth-poly-basis n nth-poly (car bases))))
+        (cons basis (drop-nth-poly (1- n) nth-poly (cdr bases)))))))
+
+(defthm len-drop-nth-poly
+  (equal (len (drop-nth-poly n nth-poly bases))
+         (if (< (nfix n) (len bases)) (1- (len bases))
+           (len bases))))
+
+(defthm all-zero-dot-list-drop-nth-poly
+  (implies
+   (and
+    (equal (dot base nth-poly) 0)
+    (all-zero (dot-list base (basis-list-bases bases))))
+   (all-zero (dot-list base (basis-list-bases (drop-nth-poly n nth-poly bases)))))
+  :hints (("goal" :in-theory (enable drop-nth-poly-basis)
+           :induct (drop-nth-poly n nth-poly bases))))
+
+#+joe
+(defthm all-zero-dot-list-nth-poly-drop-nth-poly
+  (implies
+   (and
+    (poly-equiv nth-poly (basis->poly (nth n bases)))
+    (wf-basis-listp bases))
+   (all-zero (dot-list nth-poly (basis-list-bases (drop-nth-poly n nth-poly bases)))))
+  :hints (("Goal" :in-theory (enable drop-nth-poly-basis)
+           :do-not-induct t
+           :induct (drop-nth-poly n nth-poly bases))))
+
+(defthm all-zero-dot-list-zero-poly
+  (implies
+   (zero-polyp zpoly)
+   (all-zero (dot-list zpoly list))))
+
+(defthm wf-basis-list-drop-nth-poly
+  (implies
+   (and
+    (< (nfix n) (len bases))
+    (poly-equiv nth-poly (basis->poly (nth n bases)))
+    (all-zero (dot-list nth-poly (firstn n (basis-list-bases bases))))
+    (wf-basis-listp bases))
+   (wf-basis-listp (drop-nth-poly n nth-poly bases)))
+  :hints (("Goal" :in-theory (enable drop-nth-poly-basis)
+           :induct (drop-nth-poly n nth-poly bases)
+           :do-not-induct t)))
+
+;; ** So the problem is that if you simply remove nth-poly from each
+;; base the bases are no longer disjoint.  In other words: it isn't so
+;; simple.
+
+;; So what do we need to do?
+
+;; Pk = a*P0 + b*Pi + c*PN + <Bk>
+;; Pm = d*P0 + e*Pi + f*PN + g*Pk + <Bm>
+
+;; Pk = a*P0 + c*PN + < b*Pi + Bk >  <<- This is disjoint from all previous bases
+;;
+;; <Pm,b*Bi + Bk> b*
+;;
+;; Pm = d*P0 + f*PN +          g*Bk + e*Pi + <Bm>
+
+;;  V
+;;  1 2
+;;  3 4 5
+;;  6 7 8 9
+;;  a b c d e
+;;  f g h i j k
+;; --------------
+;;  l m n o p q r
+;;  + - - - - - -
+
+;; What if we moved the base one at a time?
+
+;;  Pi : W Bi
+;;  Pj : X  a  Bj
+
+Pj = X + aPi + Bj
+   = X + a(W + Bi) + Bj
+   = (X + a*W) + < (aBi + Bj) >
+
+(aBi + Bj)(wBi + mBj) = 0
+
+aw + m = 0
+     m = -aw
+
+Pi = (W - (X + aW)  +   1(Pj) +  < Bi - Bj >
+   = W - (X + aW) + (X + a*W) + (aBi + Bj) + (1-a)*Bi - Bj
+   = W + (aBi + Bj) + (1-a)*Bi - Bj
+   = W + Bi
+
+    wPi + mPj
+
+;; So we need to invert the matrix ..
+
+;; If we were dealing with the bases, rather than the polys,
+;; 
+
+;;  0            V <- removing this one ..
+;;  0 2          1 
+;;  0 4 5        3 
+;;  0 7 8 9      6 
+;;  0 b c d e    a 
+;;  0 g h i j k  f 
+;; ----------------
+;;  0 m n o p q l+r
+
+;;  0            V
+;;  0 2          1 <- use to remove MSB
+;;  0 X 5        0 
+;;  0 X 8 9      0 
+;;  0 X c d e    0 
+;;  0 X h i j k  0 
+;; ----------------
+;;  0 X n o p q l+r
+
+;;  0            V
+;;  0 2 W X Y Z  0
+;;  0 X 5        0 
+;;  0 X 8 9      0 
+;;  0 X c d e    0 
+;;  0 X h i j k  0 
+;; ----------------
+;;  0 X n o p q l+r <- use to remove MSB residual
+
+;;  0            V
+;;  0 2 W X Y 0  0
+;;  0 X 5        0 
+;;  0 X 8 9      0 
+;;  0 X c d e    0 
+;;  0 X h i j k  0  <- use to remove 2nd residual
+;; ----------------
+;;  0 X n o p q l+r
+
+;;  0            V
+;;  0 2 W X 0 0  0
+;;  0 X 5        0 
+;;  0 X 8 9      0 
+;;  0 X c d e    0  <- use to remove 3rd residual
+;;  0 X h i j k  0
+;; ----------------
+;;  0 X n o p q l+r
+
+
+;;  0            V
+;;  0 2 0 0 0 0  0
+;;  0 X 5        0 
+;;  0 X 8 9      0 
+;;  0 X c d e    0  <- use to remove 3rd residual
+;;  0 X h i j k  0
+;; ----------------
+;;  0 X n o p q l+r
+
+;; What if we used
+
+;; But do you have any reason to believe that the resulting
+;; basis sets are actually disjoint?
+
+
+;; What if we replaced basis (i) with basis (n)
+;; 
+
+;; p0: w
+;; p1: A x       <- remove
+;; p2: B C y
+;; --:-----
+;; p3: D E F z
+;;  c: - + - - r
+
+;; [ a b c ] [ d e f g ] <b>
+
+;; p1 = A*p0 + x
+;; p3 = D*p0 + E*p1 + F*p2 + z
+
+;; p1 = (-D*p0 - F*p2 - z + p3)/E
+
+;; Of course you could just recompute everything from
+;; first principles.
+;;
+
+;; V = -a*P0 +b*P1 -c*P2 + <R>
+;; V = -a*P0 -c*P2 + <R + b*P1>
+;;
+;; Conversely, you could compute the inner product as the product of
+;; all of the positive coefficients (as opposed to just the last
+;; positive coefficient) .. since technically that is what you will
+;; have as a residual when you are done.
+;; 
+
+(def::un reconstruct-positive (coeffs bases)
+  (declare (xargs :guard (equal (len coeffs) (len bases))
+                  :congruence ((rational-list-equiv basis-list-equiv) poly-equiv)
+                  :signature ((rational-listp basis-listp) poly-p)
+                  :signature-hints (("Goal" :in-theory (disable (reconstruct-partial))))))
+  (cond
+   ((and (consp coeffs) (consp bases))
+    (let ((coeff (rfix       (car coeffs)))
+          (basis (basis-fix! (car bases))))
+      (cond
+       ((<= coeff 0) (reconstruct-partial (cdr coeffs) (cdr bases)))
+       (t 
+        (add (scale (basis->poly basis) coeff)
+             (reconstruct-partial (cdr coeffs) (cdr bases)))))))
+   (t (zero-poly))))
+
+(def::un update-zed (poly basis bases)
+  (declare (xargs :signature ((poly-p wf-basis-p wf-basis-listp) basis-p basis-listp)
+                  :signature-hints (("Goal" :do-not-induct t))))
+  (let ((base0 (add (basis->base basis) (reconstruct-positive coeffs bases))))
+    (let ((coeff (coeff poly base0)))
+      (if (<= 0 coeff) (mv nil basis bases)
+        (metlist ((poly-base coeffs) (poly-representation poly bases))
+          ;; Technically just compensating for the magnitude of base
+          (let ((coeff (coeff base0 poly-base)))
+            (let ((basis->base  (add (basis->base basis) (scale poly-base (- coeff))))
+                  (basis->coeff (cons coeff (add-coefficients (basis->coeffs basis) (scale-coefficients (- coeff) coeffs))))
+                  (basis->poly  (basis->poly basis)))
+              (if (zero-polyp basis->base) (mv basis bases)
+                (mv (basis basis->base basis->coeff basis->poly)
+                    (cons (basis poly-base coeffs poly) bases))))))))))
+
+;; So where are we going with all this?
+;;
+;; Right .. so we don't want the reference vector 
+;; expressed in terms of positive coefficients.
+;;
+;; For now we can just recompute the basis set.
+;; 
+;; a  b  p0
+;; c  d  e  p1
+;; a  b  p0 
+
+;; 2 0
+;; 3 1
+
+;; Given the following set of equations:
+
+;; a = 3w + x
+;; b = 2w + 4a + z
+
+;; We want to swap the row positions of (a) and (b).
+;; We do this as follows:
+;;
+;; 1. Solve for a in terms of b (using b)
+;; 2. Substitute the definiton of (a) into b
+;;
+
+;; a = -1/2(w) + 1/4(b) - 1/4(z)
+;; b = 2w + 4(3w + x) + z
+
+;; b =   14(w) + (4x + z)
+;; a = -1/2(w) + 1/4(b) - 1/4(z)
+
+;; Except now the residuals aren't right ..
+
+;; b =   14(w) + (4x + z)
+;; a = -1/2(w) + 1/4(b) - 1/4(z)
+
+;; I really don't see a way to do this that is any more efficient than
+;; simply re-computing the basis set.
+
+;; When we replay we actually move the (defun replay)
+;; 
+
+(defun attempt-constraints (hit list rest basis bases)
+  (if (not (consp list)) (mv hit rest basis bases)
+    (let ((poly (car list)))
+      (cond
+       ((< (dot poly (basis->base basis)) 0)
+        (met (() )
+          (attempt-constraints hit list rest basis bases)))
+       (t
+        (attempt-constraints hit (cdr list) (cons poly rest) basis bases))))))
+
+(defun fred (list basis bases)
+  (met ((hit list basis bases) (attempt-constraints nil list basis basis))
+    (cond 
+     ((not hit) ;; all non-negative
+      (mv list basis bases))
+     (t (fred list basis bases)))))
+
+  
