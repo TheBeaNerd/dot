@@ -161,11 +161,21 @@
 
 (include-book "coi/quantification/quantified-congruence" :dir :system)
 
-(quant::congruence ineq-member-equiv (x y)
-  (forall (a) (iff (member-equal a (ineq-list-fix x))
-                   (member-equal a (ineq-list-fix y))))
-  :hyps (lambda (x y x1 y1) (and (ineq-list-fix-equiv x x1)
-                                 (ineq-list-fix-equiv y y1))))
+(encapsulate
+    ()
+  
+  (local (in-theory (disable INEQ-MEMBER-EQUIV-BY-MULTIPLICITY)))
+  
+  (quant::congruence ineq-member-equiv (x y)
+    (forall (a) (iff (member-equal a (ineq-list-fix x))
+                     (member-equal a (ineq-list-fix y))))
+    :congruences ((x ineq-list-fix-equiv)
+                  (y ineq-list-fix-equiv))
+    ;; :hyps (lambda (x y x1 y1) (and (ineq-list-fix-equiv x x1)
+    ;;                                (ineq-list-fix-equiv y y1))))
+    )
+
+  )
 
 (defequiv ineq-member-equiv
   :hints ((quant::inst?)))
