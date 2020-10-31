@@ -229,9 +229,11 @@
 
 (quant::congruence linearly-dependent (x y)
   (exists (a) (and (not (equal (rfix a) 0)) (zero-polyp (add x (scale y (- (rfix a)))))))
-  :hyps (lambda (x1 y1 x2 y2) 
-          (and (poly-equiv x1 x2)
-               (poly-equiv y1 y2)))
+  :congruences ((x poly-equiv)
+                (y poly-equiv))
+  ;; :hyps (lambda (x1 y1 x2 y2) 
+  ;;         (and (poly-equiv x1 x2)
+  ;;              (poly-equiv y1 y2)))
   )
 
 (defcong poly-equiv iff (linearly-dependent x y) 1
