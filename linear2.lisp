@@ -545,6 +545,11 @@
                     (scale (reconstruct-partial (val 1 (poly-representation poly bases)) bases) m))
                (scale poly m))))
 
+(defthm all-zero-dot-list-zero-poly
+  (implies
+   (zero-polyp poly)
+   (all-zero (dot-list poly list))))
+
 (defthm wf-basis-entry-update-fred
   (implies
    (and
@@ -622,11 +627,7 @@
            :do-not-induct t
            :induct (drop-nth-poly n nth-poly bases))))
 
-(defthm all-zero-dot-list-zero-poly
-  (implies
-   (zero-polyp zpoly)
-   (all-zero (dot-list zpoly list))))
-
+#+joe
 (defthm wf-basis-list-drop-nth-poly
   (implies
    (and
@@ -669,21 +670,21 @@
 ;;  Pi : W Bi
 ;;  Pj : X  a  Bj
 
-Pj = X + aPi + Bj
-   = X + a(W + Bi) + Bj
-   = (X + a*W) + < (aBi + Bj) >
+;; Pj = X + aPi + Bj
+;;    = X + a(W + Bi) + Bj
+;;    = (X + a*W) + < (aBi + Bj) >
 
-(aBi + Bj)(wBi + mBj) = 0
+;; (aBi + Bj)(wBi + mBj) = 0
 
-aw + m = 0
-     m = -aw
+;; aw + m = 0
+;;      m = -aw
 
-Pi = (W - (X + aW)  +   1(Pj) +  < Bi - Bj >
-   = W - (X + aW) + (X + a*W) + (aBi + Bj) + (1-a)*Bi - Bj
-   = W + (aBi + Bj) + (1-a)*Bi - Bj
-   = W + Bi
+;; Pi = (W - (X + aW)  +   1(Pj) +  < Bi - Bj >
+;;    = W - (X + aW) + (X + a*W) + (aBi + Bj) + (1-a)*Bi - Bj
+;;    = W + (aBi + Bj) + (1-a)*Bi - Bj
+;;    = W + Bi
 
-    wPi + mPj
+;;     wPi + mPj
 
 ;; So we need to invert the matrix ..
 
@@ -781,96 +782,96 @@ Pi = (W - (X + aW)  +   1(Pj) +  < Bi - Bj >
 ;; have as a residual when you are done.
 ;; 
 
-(def::un reconstruct-positive (coeffs bases)
-  (declare (xargs :guard (equal (len coeffs) (len bases))
-                  :congruence ((rational-list-equiv basis-list-equiv) poly-equiv)
-                  :signature ((rational-listp basis-listp) poly-p)
-                  :signature-hints (("Goal" :in-theory (disable (reconstruct-partial))))))
-  (cond
-   ((and (consp coeffs) (consp bases))
-    (let ((coeff (rfix       (car coeffs)))
-          (basis (basis-fix! (car bases))))
-      (cond
-       ((<= coeff 0) (reconstruct-partial (cdr coeffs) (cdr bases)))
-       (t 
-        (add (scale (basis->poly basis) coeff)
-             (reconstruct-partial (cdr coeffs) (cdr bases)))))))
-   (t (zero-poly))))
+;; (def::un reconstruct-positive (coeffs bases)
+;;   (declare (xargs :guard (equal (len coeffs) (len bases))
+;;                   :congruence ((rational-list-equiv basis-list-equiv) poly-equiv)
+;;                   :signature ((rational-listp basis-listp) poly-p)
+;;                   :signature-hints (("Goal" :in-theory (disable (reconstruct-partial))))))
+;;   (cond
+;;    ((and (consp coeffs) (consp bases))
+;;     (let ((coeff (rfix       (car coeffs)))
+;;           (basis (basis-fix! (car bases))))
+;;       (cond
+;;        ((<= coeff 0) (reconstruct-partial (cdr coeffs) (cdr bases)))
+;;        (t 
+;;         (add (scale (basis->poly basis) coeff)
+;;              (reconstruct-partial (cdr coeffs) (cdr bases)))))))
+;;    (t (zero-poly))))
 
-(def::un update-zed (poly basis bases)
-  (declare (xargs :signature ((poly-p wf-basis-p wf-basis-listp) basis-p basis-listp)
-                  :signature-hints (("Goal" :do-not-induct t))))
-  (let ((base0 (add (basis->base basis) (reconstruct-positive coeffs bases))))
-    (let ((coeff (coeff poly base0)))
-      (if (<= 0 coeff) (mv nil basis bases)
-        (metlist ((poly-base coeffs) (poly-representation poly bases))
-          ;; Technically just compensating for the magnitude of base
-          (let ((coeff (coeff base0 poly-base)))
-            (let ((basis->base  (add (basis->base basis) (scale poly-base (- coeff))))
-                  (basis->coeff (cons coeff (add-coefficients (basis->coeffs basis) (scale-coefficients (- coeff) coeffs))))
-                  (basis->poly  (basis->poly basis)))
-              (if (zero-polyp basis->base) (mv basis bases)
-                (mv (basis basis->base basis->coeff basis->poly)
-                    (cons (basis poly-base coeffs poly) bases))))))))))
+;; (def::un update-zed (poly basis bases)
+;;   (declare (xargs :signature ((poly-p wf-basis-p wf-basis-listp) basis-p basis-listp)
+;;                   :signature-hints (("Goal" :do-not-induct t))))
+;;   (let ((base0 (add (basis->base basis) (reconstruct-positive coeffs bases))))
+;;     (let ((coeff (coeff poly base0)))
+;;       (if (<= 0 coeff) (mv nil basis bases)
+;;         (metlist ((poly-base coeffs) (poly-representation poly bases))
+;;           ;; Technically just compensating for the magnitude of base
+;;           (let ((coeff (coeff base0 poly-base)))
+;;             (let ((basis->base  (add (basis->base basis) (scale poly-base (- coeff))))
+;;                   (basis->coeff (cons coeff (add-coefficients (basis->coeffs basis) (scale-coefficients (- coeff) coeffs))))
+;;                   (basis->poly  (basis->poly basis)))
+;;               (if (zero-polyp basis->base) (mv basis bases)
+;;                 (mv (basis basis->base basis->coeff basis->poly)
+;;                     (cons (basis poly-base coeffs poly) bases))))))))))
 
-;; So where are we going with all this?
-;;
-;; Right .. so we don't want the reference vector 
-;; expressed in terms of positive coefficients.
-;;
-;; For now we can just recompute the basis set.
-;; 
-;; a  b  p0
-;; c  d  e  p1
-;; a  b  p0 
+;; ;; So where are we going with all this?
+;; ;;
+;; ;; Right .. so we don't want the reference vector 
+;; ;; expressed in terms of positive coefficients.
+;; ;;
+;; ;; For now we can just recompute the basis set.
+;; ;; 
+;; ;; a  b  p0
+;; ;; c  d  e  p1
+;; ;; a  b  p0 
 
-;; 2 0
-;; 3 1
+;; ;; 2 0
+;; ;; 3 1
 
-;; Given the following set of equations:
+;; ;; Given the following set of equations:
 
-;; a = 3w + x
-;; b = 2w + 4a + z
+;; ;; a = 3w + x
+;; ;; b = 2w + 4a + z
 
-;; We want to swap the row positions of (a) and (b).
-;; We do this as follows:
-;;
-;; 1. Solve for a in terms of b (using b)
-;; 2. Substitute the definiton of (a) into b
-;;
+;; ;; We want to swap the row positions of (a) and (b).
+;; ;; We do this as follows:
+;; ;;
+;; ;; 1. Solve for a in terms of b (using b)
+;; ;; 2. Substitute the definiton of (a) into b
+;; ;;
 
-;; a = -1/2(w) + 1/4(b) - 1/4(z)
-;; b = 2w + 4(3w + x) + z
+;; ;; a = -1/2(w) + 1/4(b) - 1/4(z)
+;; ;; b = 2w + 4(3w + x) + z
 
-;; b =   14(w) + (4x + z)
-;; a = -1/2(w) + 1/4(b) - 1/4(z)
+;; ;; b =   14(w) + (4x + z)
+;; ;; a = -1/2(w) + 1/4(b) - 1/4(z)
 
-;; Except now the residuals aren't right ..
+;; ;; Except now the residuals aren't right ..
 
-;; b =   14(w) + (4x + z)
-;; a = -1/2(w) + 1/4(b) - 1/4(z)
+;; ;; b =   14(w) + (4x + z)
+;; ;; a = -1/2(w) + 1/4(b) - 1/4(z)
 
-;; I really don't see a way to do this that is any more efficient than
-;; simply re-computing the basis set.
+;; ;; I really don't see a way to do this that is any more efficient than
+;; ;; simply re-computing the basis set.
 
-;; When we replay we actually move the (defun replay)
-;; 
+;; ;; When we replay we actually move the (defun replay)
+;; ;; 
 
-(defun attempt-constraints (hit list rest basis bases)
-  (if (not (consp list)) (mv hit rest basis bases)
-    (let ((poly (car list)))
-      (cond
-       ((< (dot poly (basis->base basis)) 0)
-        (met (() )
-          (attempt-constraints hit list rest basis bases)))
-       (t
-        (attempt-constraints hit (cdr list) (cons poly rest) basis bases))))))
+;; (defun attempt-constraints (hit list rest basis bases)
+;;   (if (not (consp list)) (mv hit rest basis bases)
+;;     (let ((poly (car list)))
+;;       (cond
+;;        ((< (dot poly (basis->base basis)) 0)
+;;         (met (() )
+;;           (attempt-constraints hit list rest basis bases)))
+;;        (t
+;;         (attempt-constraints hit (cdr list) (cons poly rest) basis bases))))))
 
-(defun fred (list basis bases)
-  (met ((hit list basis bases) (attempt-constraints nil list basis basis))
-    (cond 
-     ((not hit) ;; all non-negative
-      (mv list basis bases))
-     (t (fred list basis bases)))))
+;; (defun fred (list basis bases)
+;;   (met ((hit list basis bases) (attempt-constraints nil list basis basis))
+;;     (cond 
+;;      ((not hit) ;; all non-negative
+;;       (mv list basis bases))
+;;      (t (fred list basis bases)))))
 
   
