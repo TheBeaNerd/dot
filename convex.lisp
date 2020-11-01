@@ -331,26 +331,158 @@
 
   )
 
-(defthmd scaled-remainder-is-just-the-remainder
-  (implies
-   (equal (dot delta (add z delta)) 0)
-   (poly-equiv (scale (add z delta) (coeff z (add z delta)))
-               (add z delta)))
-  :hints (("Goal" :in-theory (e/d (coeff inner-product-rewrite) ()))
-          (and (equal (string-for-tilde-@-clause-id-phrase id) "Subgoal 1''")
-               (skosimp-inst))
-          ("Subgoal 2" :cases ((hide (rewrite-equiv (equal (DOT DELTA Z)  (- (DOT DELTA DELTA)))))))
-          ("Subgoal 2.2" :expand (:free (x) (hide x)))
-          ("Subgoal 2.1.2" :in-theory (enable poly-equiv-reduction))
-          ("Subgoal 2.1.1" :in-theory (current-theory :here)
-           :expand (:free (x y) (hide (rewrite-equiv (equal x y))))
-           :use (:instance inner-product-rewrite
-                           (x z)
-                           (y delta)))
-          ("Subgoal 2.1.1''" :use (:instance linearly-dependent-rewrite-equiv
-                                             (x z)
-                                             (y delta)))
-          ))
+;; dag
+;; (include-book "coi/quantification/quantified-equivalence" :dir :system)
+
+;; (defun-sk poly-equiv-coeff (x y)
+;;   (forall (a) (equal (coeff a x)
+;;                      (coeff a y)))
+;;   :rewrite t)
+
+;; (defthm aggrevated-sigh
+;;   (implies
+;;    (equal (coeff (poly-equiv-coeff-witness x y) x)
+;;           (coeff (poly-equiv-coeff-witness x y) y))
+;;    (iff (equal (coeff a x)
+;;                (coeff a y)) t))
+;;   :hints (("goal" :in-theory (e/d (poly-equiv-coeff)
+;;                                   (poly-equiv-coeff-necc))
+;;            :use poly-equiv-coeff-necc)))
+
+;; (defthm poly-equiv-coeff-predicate-congruence
+;;   (implies
+;;    (poly-equiv-coeff x y)
+;;    (iff (equal (coeff a x)
+;;                (coeff a y))
+;;         t)))
+
+;; (defthm abstract-to-poly-equiv-coeff
+;;   (iff (equal (coeff (poly-equiv-coeff-witness x y) x)
+;;               (coeff (poly-equiv-coeff-witness x y) y))
+;;        (poly-equiv-coeff x y)))
+
+;; (in-theory (disable poly-equiv-coeff))
+
+;; (quant::equiv poly-equiv-coeff (x y) nil
+;;   (forall (a) (equal (coeff a x)
+;;                      (coeff a y))))
+
+;; (defrefinement poly-equiv poly-equiv-coeff
+;;   :hints (("Goal" :in-theory (e/d (poly-equiv-coeff)
+;;                                   (abstract-to-poly-equiv-coeff)))))
+
+;; (defcong poly-equiv-coeff equal (coeff a x) 2)
+
+;; (defthm this-is-where-we-were-going
+;;   (implies
+;;    (poly-equiv-coeff x y)
+;;    (poly-equiv x y)))
+
+;; (defthm zl
+;;   (implies
+;;    (poly-equiv x y)
+;;    (equal (coeff a x)
+;;           (coeff a y))))
+
+(defthmd poly-equiv-zero-poly-add
+  (iff (poly-equiv (zero-poly) (add x y))
+       (poly-equiv (scale x -1) y))
+  :hints (("Subgoal 1" :in-theory (enable POLY-EQUIV-REDUCTION)
+           
+           :restrict ((POLY-EQUIV-REDUCTION
+                       ((x (scale x -1))
+                        (y y)))))
+          (and stable-under-simplificationp
+               '(:in-theory nil ;;(disable POLY-EQUIV-IMPLIES-EQUAL-DOT-2)
+                            :use (:instance POLY-EQUIV-IMPLIES-EQUAL-DOT-2
+                                            (y (ZERO-POLY))
+                                            (y-equiv (ADD X Y))
+                                            (x (POLY-EQUIV-WITNESS (SCALE X -1) Y)))))
+          (and stable-under-simplificationp
+               '(:in-theory (disable POLY-EQUIV-IMPLIES-EQUAL-ZERO-POLYP-1
+                                     ;;POLY-EQUIV-IMPLIES-EQUAL-ZERO-POLYP-2
+                                     POLY-EQUIV-IMPLIES-EQUAL-DOT-1
+                                     POLY-EQUIV-IMPLIES-EQUAL-DOT-2)))
+          ("Subgoal 2" :in-theory (enable POLY-EQUIV-REDUCTION)
+           :restrict ((POLY-EQUIV-REDUCTION
+                       ((x (zero-poly))
+                        (y (add x y))))))))
+
+(encapsulate
+    ()
+
+  (local
+   (encapsulate
+       ()
+     
+     
+     ;; Yeah .. this should be true.
+     (defstub y () nil)
+     
+     ;; Y can be decomposed relative to x ..
+     
+     (defun delta (x)
+       (residual (y) x))
+     
+     (defthm dot-delta
+       (equal (dot x (delta x)) 0))
+     
+     (def::un cx (x)
+       (declare (xargs :signature ((t) rationalp)))
+       (coeff (poly-fix (y)) (poly-fix x)))
+     
+     (def::un cy (x)
+       (declare (xargs :signature ((t) rationalp)))
+       (coeff (poly-fix (y)) (residual (poly-fix (y)) (poly-fix x))))
+     
+     (defthm y-decomposition
+       (poly-equiv (y) (add (scale        x  (cx x))
+                            (scale (delta x) (cy x))))
+       :hints (("Goal" :use (:instance orthoganal-decomposition
+                                       (z (y))))))
+     
+     (in-theory (disable delta cx cy))
+     
+     (defthm delta-proof-helper
+       (implies
+        (and
+         (equal (dot x x) (dot (y) (y)))
+         (equal (dot x (y)) (- (dot x x))))
+        (poly-equiv x (scale (y) -1))))
+
+     ))
+
+  (local
+   (defthm delta-proof
+     (implies
+      (and
+       (equal (dot x x) (dot y y))
+       (equal (dot x y) (- (dot x x))))
+      (iff (poly-equiv (scale y -1) x) t))
+     :hints (("Goal" :use (:functional-instance delta-proof-helper
+                                                (y (lambda () y)))))))
+
+  (defthmd scaled-remainder-is-just-the-remainder
+    (implies
+     (equal (dot delta (add z delta)) 0)
+     (poly-equiv (scale (add z delta) (coeff z (add z delta)))
+                 (add z delta)))
+    :hints (("Goal" :in-theory (e/d (coeff inner-product-rewrite) ()))
+            (and (equal (string-for-tilde-@-clause-id-phrase id) "Subgoal 1''")
+                 (skosimp-inst))
+            ("Subgoal 2" :cases ((hide (rewrite-equiv (equal (DOT DELTA Z)  (- (DOT DELTA DELTA)))))))
+            ("Subgoal 2.2" :expand (:free (x) (hide x)))
+            ("Subgoal 2.1" :in-theory (enable poly-equiv-zero-poly-add))
+            ("Subgoal 2.1.1" :in-theory (current-theory :here)
+             :expand (:free (x y) (hide (rewrite-equiv (equal x y))))
+             :use (:instance inner-product-rewrite
+                             (x z)
+                             (y delta)))
+            ("Subgoal 2.1.1''" :use (:instance linearly-dependent-rewrite-equiv
+                                               (x z)
+                                               (y delta)))
+            ))
+  )
 
 (defthmd zero-dot-residual
   (equal (dot (SCALE B (- (COEFF V B))) (ADD V (SCALE B (- (COEFF V B)))))

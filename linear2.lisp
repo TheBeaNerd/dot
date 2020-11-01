@@ -545,6 +545,11 @@
                     (scale (reconstruct-partial (val 1 (poly-representation poly bases)) bases) m))
                (scale poly m))))
 
+(defthm all-zero-dot-list-zero-poly
+  (implies
+   (zero-polyp poly)
+   (all-zero (dot-list poly list))))
+
 (defthm wf-basis-entry-update-fred
   (implies
    (and
